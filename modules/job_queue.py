@@ -7,7 +7,7 @@ import logging
 job_queue_logger = logging.getLogger("job_queue_logger")
 job_queue_logger.setLevel(logging.WARN)
 formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-file_handler = logging.FileHandler(filename='./misc/logs/logs.txt')
+file_handler = logging.FileHandler("../misc/logs/logs.txt")
 file_handler.setFormatter(formatter)
 job_queue_logger.addHandler(file_handler)
 console_handler = logging.StreamHandler()
@@ -117,3 +117,15 @@ async def scheduled_edit_message(context: ContextTypes.DEFAULT_TYPE):
                                             parse_mode="HTML")
     except telegram.error.TelegramError as e:
         job_queue_logger.error(f'Not able to perform scheduled action: {e}')
+
+
+async def scheduled_delete_message(context: ContextTypes.DEFAULT_TYPE):
+    if "message_id" not in context.job.data or "chat_id" not in context.job.data:
+        job_queue_logger.error("Missing message_id or chat_id in job data")
+        raise Exception("Missing 'message_id' or 'chat_id' in job data.")
+    
+    try:
+        await context.bot.delete_message(chat_id=context.job.data["chat_id"], 
+                                         message_id=context.job.data["message_id"])
+    except telegram.error.BadRequest as e:
+        job_queue_logger.warning(f'Not able to perform scheduled action: {e}')

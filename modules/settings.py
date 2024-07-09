@@ -20,22 +20,24 @@ async def set_defaults(update: Update, context: CallbackContext):
 
         context.bot_data["settings"]["tutorial"] = True
 
-        await context.bot.send_message(chat_id=update.effective_chat.id,
-                                       text="🔧 <b>Setting Default Values</b>\n\n"
-                                            "➡ <u>Default Checking Interval</u> – Se non specificherai un intervallo "
-                                            "di controllo, verrà settato quello che stai impostando adesso."
-                                            "\n\n❔ <b>Format</b>\nFornisci una stringa nel formato ↙\n\n "
-                                            "<code>?m?d?h?min?s</code>\n\nsostituendo i <code>?</code> con i valori "
-                                            "corrispondenti di:\n\n"
-                                            "\t1️⃣ <code>m</code> – Mesi\n"
-                                            "\t2️⃣ <code>d</code> – Giorni\n"
-                                            "\t3️⃣ <code>h</code> – Ore\n"
-                                            "\t4️⃣ <code>min</code> – Minuti\n"
-                                            "\t5️⃣ <code>s</code> – Secondi\n\n"
-                                            "Inserisci tutti i valori corrispondenti anche se nulli.\n\n "
-                                            "<b>Esempio</b> 🔎 – <code>0m2d0h15min0s</code>"
-                                            "\n\n🔹Non è un valore definitivo: lo puoi cambiare quando vorrai.",
-                                       parse_mode="HTML")
+        message = await context.bot.send_message(chat_id=update.effective_chat.id,
+                                                 text="🔧 <b>Setting Default Values</b>\n\n"
+                                                      "➡ <u>Default Checking Interval</u> – Se non specificherai un "
+                                                      "intervallo di controllo, verrà settato quello che stai "
+                                                      "impostando adesso.\n\n"
+                                                      "❔ <b>Format</b>\nFornisci una stringa nel formato ↙\n\n "
+                                                      "<code>?m?d?h?min?s</code>\n\nsostituendo i <code>?</code> con i "
+                                                      "valori corrispondenti di:\n\n"
+                                                      "\t1️⃣ <code>m</code> – Mesi\n"
+                                                      "\t2️⃣ <code>d</code> – Giorni\n"
+                                                      "\t3️⃣ <code>h</code> – Ore\n"
+                                                      "\t4️⃣ <code>min</code> – Minuti\n"
+                                                      "\t5️⃣ <code>s</code> – Secondi\n\n"
+                                                      "Inserisci tutti i valori corrispondenti anche se nulli.\n\n "
+                                                      "<b>Esempio</b> 🔎 – <code>0m2d0h15min0s</code>\n\n"
+                                                      "🔹Non è un valore definitivo: lo puoi cambiare quando vorrai.",
+                                                 parse_mode="HTML")
+        context.chat_data["messages_to_delete"] = message.id
         return 2
 
     if update.callback_query is None and update.message is not None:
@@ -45,6 +47,20 @@ async def set_defaults(update: Update, context: CallbackContext):
             hours = int(update.message.text.split('h')[0].split('d')[1])
             minutes = int(update.message.text.split('min')[0].split('h')[1])
             seconds = int(update.message.text.split('s')[0].split('min')[1])
+
+            context.job_queue.run_once(callback=job_queue.scheduled_delete_message,
+                                       data={
+                                           "chat_id": update.effective_chat.id,
+                                           "message_id": update.message.id,
+                                       },
+                                       when=2.5)
+
+            context.job_queue.run_once(callback=job_queue.scheduled_delete_message,
+                                       data={
+                                           "chat_id": update.effective_chat.id,
+                                           "message_id": context.chat_data["messages_to_delete"],
+                                       },
+                                       when=2)
         except ValueError:
             text = ("❌ <b>Usa il formato indicato</b>, non aggiungere, togliere o cambiare lettere."
                     "\n\n🔎 <code>#m#d#h#min#s</code>")
@@ -64,11 +80,11 @@ async def set_defaults(update: Update, context: CallbackContext):
                 "hours": hours
             }
             text = (f"❓ Conferma se l'intervallo indicato è corretto.\n\n"
-                    f"1️⃣ <code>{months}</code> mesi\n"
-                    f"2️⃣ <code>{days}</code> giorni\n"
-                    f"3️⃣ <code>{hours}</code> ore\n"
-                    f"4️⃣ <code>{minutes}</code> minuti\n"
-                    f"5️⃣ <code>{seconds}</code> secondi")
+                    f"▪️ <code>{months}</code> mesi\n"
+                    f"▪️ <code>{days}</code> giorni\n"
+                    f"▪️ <code>{hours}</code> ore\n"
+                    f"▪️ <code>{minutes}</code> minuti\n"
+                    f"▪️ <code>{seconds}</code> secondi")
             message = await context.bot.send_message(chat_id=update.effective_chat.id,
                                                      text=text,
                                                      parse_mode="HTML")

@@ -7,7 +7,7 @@ import logging
 job_queue_logger = logging.getLogger("job_queue_logger")
 job_queue_logger.setLevel(logging.WARN)
 formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-file_handler = logging.FileHandler("../misc/logs/logs.txt")
+file_handler = logging.FileHandler(filename='./misc/logs/logs.txt')
 file_handler.setFormatter(formatter)
 job_queue_logger.addHandler(file_handler)
 console_handler = logging.StreamHandler()

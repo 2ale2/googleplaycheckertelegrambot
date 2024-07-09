@@ -29,7 +29,7 @@ logging.basicConfig(
 
 bot_logger = logging.getLogger("bot_logger")
 bot_logger.setLevel(logging.INFO)
-file_handler = logging.FileHandler("../misc/logs/logs.txt")
+file_handler = logging.FileHandler(filename='./misc/logs/logs.txt')
 bot_logger.addHandler(file_handler)
 
 
@@ -214,7 +214,7 @@ async def send_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 def main():
-    persistence = PicklePersistence(filepath="../misc/config/persistence")
+    persistence = PicklePersistence(filepath="./misc/config/persistence")
     app = (ApplicationBuilder().token(os.getenv("BOT_TOKEN")).persistence(persistence).
            post_init(set_data).build())
 

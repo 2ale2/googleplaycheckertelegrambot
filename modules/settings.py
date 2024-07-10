@@ -167,6 +167,12 @@ async def set_defaults(update: Update, context: CallbackContext):
 
 
 async def change_settings(update: Update, context: CallbackContext):
+    text = ("⚙ <b>Settings Panel</b>\n\n🔹Da qui puoi cambiare le impostazioni di default e gestire le applicazioni "
+            "monitorate.\n\n🔸 Scegli un'opzione.")
+    try:
+        await context.bot.edit_message_text(chat_id=update.effective_chat.id,
+                                            message_id=update.message.message_id,
+                                            text=text)
     pass
 
 

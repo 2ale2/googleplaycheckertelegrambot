@@ -14,6 +14,7 @@ from dotenv import load_dotenv
 from bs4 import BeautifulSoup
 
 from functools import wraps
+from logging import handlers
 import logging
 import os
 import requests
@@ -29,7 +30,8 @@ logging.basicConfig(
 
 bot_logger = logging.getLogger("bot_logger")
 bot_logger.setLevel(logging.INFO)
-file_handler = logging.FileHandler(filename='../misc/logs/logs.txt')
+file_handler = handlers.RotatingFileHandler(filename="../misc/logs/main.log",
+                                            maxBytes=1024, backupCount=1)
 bot_logger.addHandler(file_handler)
 
 

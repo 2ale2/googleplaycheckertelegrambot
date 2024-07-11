@@ -4,8 +4,15 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from datetime import timedelta
 
 import telegram
-
+import logging
+from logging import handlers
 import job_queue
+
+settings_logger = logging.getLogger("settings_logger")
+settings_logger.setLevel(logging.INFO)
+file_handler = handlers.RotatingFileHandler(filename="../misc/logs/settings.log",
+                                            maxBytes=1024, backupCount=1)
+settings_logger.addHandler(file_handler)
 
 
 async def set_defaults(update: Update, context: CallbackContext):
@@ -169,10 +176,23 @@ async def set_defaults(update: Update, context: CallbackContext):
 async def change_settings(update: Update, context: CallbackContext):
     text = ("⚙ <b>Settings Panel</b>\n\n🔹Da qui puoi cambiare le impostazioni di default e gestire le applicazioni "
             "monitorate.\n\n🔸 Scegli un'opzione.")
+
+    message = update.effective_message
+    keyboard = [
+        [
+            InlineKeyboardButton(text="🗂 Gestisci App", callback_data="menage_apps"),
+            InlineKeyboardButton(text="🔧 Imp. Default", callback_data="edit_default_settings")
+        ],
+        [InlineKeyboardButton(text="🔙 Menù Principale", callback_data="start_menu")]
+    ]
     try:
         await context.bot.edit_message_text(chat_id=update.effective_chat.id,
                                             message_id=update.message.message_id,
                                             text=text)
+    except telegram.error.BadRequest as e:
+        settings_logger.warning(f"Not able to edit message: {e}\nA new message will be sent.")
+        await context.bot.send_message(chat_id=update.effective_chat.id,
+                                       text=text)
     pass
 
 

@@ -3,11 +3,13 @@ from telegram.ext import ContextTypes
 import telegram
 
 import logging
+from logging import handlers
 
 job_queue_logger = logging.getLogger("job_queue_logger")
 job_queue_logger.setLevel(logging.WARN)
 formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-file_handler = logging.FileHandler("../misc/logs/logs.txt")
+file_handler = handlers.RotatingFileHandler(filename="../misc/logs/job_queue.log",
+                                            maxBytes=1024, backupCount=1)
 file_handler.setFormatter(formatter)
 job_queue_logger.addHandler(file_handler)
 console_handler = logging.StreamHandler()

@@ -14,6 +14,8 @@ file_handler = handlers.RotatingFileHandler(filename="../misc/logs/settings.log"
                                             maxBytes=1024, backupCount=1)
 settings_logger.addHandler(file_handler)
 
+CHANGE_SETTINGS, MENAGE_APPS, LIST_LAST_CHECKS, MENAGE_APPS_OPTIONS, LIST_APPS = range(5)
+
 
 async def set_defaults(update: Update, context: CallbackContext):
     if update.callback_query is not None and (update.callback_query.data.startswith("set_defaults") or
@@ -177,22 +179,126 @@ async def change_settings(update: Update, context: CallbackContext):
     text = ("⚙ <b>Settings Panel</b>\n\n🔹Da qui puoi cambiare le impostazioni di default e gestire le applicazioni "
             "monitorate.\n\n🔸 Scegli un'opzione.")
 
-    message = update.effective_message
     keyboard = [
         [
             InlineKeyboardButton(text="🗂 Gestisci App", callback_data="menage_apps"),
             InlineKeyboardButton(text="🔧 Imp. Default", callback_data="edit_default_settings")
         ],
-        [InlineKeyboardButton(text="🔙 Menù Principale", callback_data="start_menu")]
+        [InlineKeyboardButton(text="🔙 Menu Principale", callback_data="start_menu")]
     ]
-    try:
-        await context.bot.edit_message_text(chat_id=update.effective_chat.id,
-                                            message_id=update.message.message_id,
-                                            text=text)
-    except telegram.error.BadRequest as e:
-        settings_logger.warning(f"Not able to edit message: {e}\nA new message will be sent.")
-        await context.bot.send_message(chat_id=update.effective_chat.id,
-                                       text=text)
+
+    await parse_conversation_message(data={
+        "chat_id": update.effective_chat.id,
+        "message_id": update.effective_message.message_id,
+        "text": text,
+        "reply_markup": InlineKeyboardMarkup(keyboard),
+        "parse_mode": "HTML"
+    }, context=context)
+
+    return CHANGE_SETTINGS
+
+
+async def menage_apps(update: Update, context: CallbackContext):
+    if update.callback_query.data == "menage_apps" or update.callback_query.data.startswith("back_to_main_settings"):
+        text = ("🗂 <b>Gestione Applicazioni</b>\n\n"
+                "🔹Da questo menù, puoi visualizzare e gestire le applicazioni.")
+
+        keyboard = [
+            [
+                InlineKeyboardButton(text="📄 Lista App", callback_data="list_apps"),
+                InlineKeyboardButton(text="➕ Aggiungi", callback_data="add_app"),
+                InlineKeyboardButton(text="➖ Rimuovi", callback_data="remove_app")
+            ],
+            [InlineKeyboardButton(text="🔙 Torna Indietro",
+                                  callback_data=f"back_to_main_menu {update.effective_message.id}")]
+        ]
+
+        await parse_conversation_message(data={
+            "chat_id": update.effective_chat.id,
+            "message_id": update.effective_message.message_id,
+            "text": text,
+            "reply_markup": InlineKeyboardMarkup(keyboard),
+            "parse_mode": "HTML"
+        }, context=context)
+
+        return MENAGE_APPS
+
+    if update.callback_query.data == "list_apps" or update.callback_query.data == "go_back_to_list_apps":
+        if len(context.bot_data["apps"]) == 0:
+            keyboard = [
+                [
+                    InlineKeyboardButton(text="➕ Aggiungi", callback_data="add_app"),
+                    InlineKeyboardButton(text="🔙 Torna Indietro",
+                                         callback_data=f"back_to_main_settings {update.effective_message.id}")
+                ]
+            ]
+            text = ("🅾️ <code>No Apps Yet</code>\n\n"
+                    "🔸Usa la tastiera per aggiungerne")
+
+            await parse_conversation_message(data={
+                "chat_id": update.effective_chat.id,
+                "message_id": update.effective_message.message_id,
+                "text": text,
+                "reply_markup": InlineKeyboardMarkup(keyboard),
+                "parse_mode": "HTML"
+            }, context=context)
+
+        else:
+            keyboard = [
+                [
+                    InlineKeyboardButton(text="➕ Aggiungi", callback_data="add_app"),
+                    InlineKeyboardButton(text="➖ Rimuovi", callback_data="remove_app"),
+                    InlineKeyboardButton(text="🖋 Modifica", callback_data="edit_app")
+                ],
+                [InlineKeyboardButton(text="🔎 Dettagli App", callback_data="info_app")],
+                [InlineKeyboardButton(text="🔙 Torna Indietro",
+                                      callback_data=f"back_to_main_settings {update.effective_message.id}")]
+            ]
+
+            text = "👁‍🗨 <b>Watched Apps</b>\n\n"
+            for count, app in enumerate(context.bot_data["apps"], start=1):
+                text += (f"  {count}. {context.bot_data['apps'][str(count)]["app_name"]}\n"
+                         f"    <code>Interval</code> {context.bot_data['apps'][str(count)]["check_interval"]}\n"
+                         f"    <code>Send On Check</code> {context.bot_data['apps'][str(count)]["send_on_check"]}\n")
+
+            text += "\n🆘 Per i dettagli su un'applicazione, scegli 🖋 Modifica\n\n🔸Scegli un'opzione"
+
+            await parse_conversation_message(data={
+                "chat_id": update.effective_chat.id,
+                "message_id": update.effective_message.message_id,
+                "text": text,
+                "reply_markup": InlineKeyboardMarkup(keyboard),
+                "parse_mode": "HTML"
+            }, context=context)
+
+        return LIST_APPS
+
+    if update.callback_query.data == "add_app" or update.callback_query.data == "go_back_to_add_app":
+        text = "⬇️ <b>Aggiungi App</b>"
+
+        keyboard = [
+            [InlineKeyboardButton(text="Luca Fuso Omosessuale", callback_data="suca")]
+        ]
+
+        await parse_conversation_message(data={
+            "chat_id": update.effective_chat.id,
+            "message_id": update.effective_message.message_id,
+            "text": text,
+            "reply_markup": InlineKeyboardMarkup(keyboard),
+            "parse_mode": "HTML"
+        }, context=context)
+
+    if update.callback_query.data == "remove_app" or update.callback_query.data == "go_back_to_remove_app":
+        pass
+
+    if update.callback_query.data == "edit_app" or update.callback_query.data == "go_back_to_edit_app":
+        pass
+
+    if update.callback_query.data == "info_app" or update.callback_query.data == "go_back_to_info_app":
+        pass
+
+
+async def edit_default_settings(update: Update, context: CallbackContext):
     pass
 
 
@@ -204,3 +310,28 @@ async def close_menu(update: Update, context: CallbackContext):
         pass
     finally:
         return ConversationHandler.END
+
+
+async def parse_conversation_message(context: CallbackContext, data: dict):
+    check_dict_keys(data, ["chat_id", "message_id", "text", "reply_markup"])
+
+    chat_id, message_id, text, reply_markup = data["chat_id"], data["message_id"], data["text"], data["reply_markup"]
+
+    try:
+        await context.bot.edit_message_text(chat_id=chat_id,
+                                            message_id=message_id,
+                                            text=text,
+                                            reply_markup=reply_markup,
+                                            parse_mode="HTML")
+    except telegram.error.BadRequest as e:
+        settings_logger.warning(f"Not able to edit message: {e}\nA new one will be sent.")
+        await context.bot.send_message(chat_id=chat_id,
+                                       text=text,
+                                       reply_markup=reply_markup,
+                                       parse_mode="HTML")
+
+
+def check_dict_keys(d: dict, keys: list):
+    mancanti = [key for key in keys if key not in d]
+    if len(mancanti) != 0:
+        raise Exception(f"Missing key(s): {mancanti} in dictionary {d}")

@@ -35,7 +35,7 @@ file_handler = handlers.RotatingFileHandler(filename="../misc/logs/main.log",
 bot_logger.addHandler(file_handler)
 
 
-CHANGE_SETTINGS, LIST_LAST_CHECKS = range(2)
+CHANGE_SETTINGS, MENAGE_APPS, LIST_LAST_CHECKS, MENAGE_APPS_OPTIONS, LIST_APPS = range(5)
 
 
 def send_action(action):
@@ -138,6 +138,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return 0
 
     await send_menu(update, context)
+    return ConversationHandler.END
 
 
 @send_action(ChatAction.TYPING)
@@ -194,6 +195,7 @@ async def send_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
                                                  message_id=int(li[1]))
             except telegram.error.BadRequest:
                 pass
+
     keyboard = [
         [
             InlineKeyboardButton(text="⚙ Settings", callback_data="settings"),
@@ -213,6 +215,8 @@ async def send_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
                                    "close_button": [2, 1]
                                },
                                when=1)
+
+    return CHANGE_SETTINGS
 
 
 def main():
@@ -247,11 +251,30 @@ def main():
 
     conv_handler2 = ConversationHandler(
         entry_points=[
-            CommandHandler("start", start),
-            CallbackQueryHandler(pattern="^default_setting_finished.+$", callback=start),
+            CallbackQueryHandler(pattern="settings", callback=settings.change_settings),
+            CallbackQueryHandler(pattern="^default_setting_finished.+$", callback=send_menu)
         ],
         states={
-            CHANGE_SETTINGS: [],
+            CHANGE_SETTINGS: [
+                CallbackQueryHandler(pattern="settings", callback=settings.change_settings),
+                CallbackQueryHandler(pattern="menage_apps", callback=settings.menage_apps),
+                CallbackQueryHandler(pattern="edit_default_settings", callback=settings.edit_default_settings),
+            ],
+            MENAGE_APPS: [
+                CallbackQueryHandler(pattern="back_to_main_menu", callback=send_menu),
+
+                CallbackQueryHandler(pattern="list_apps", callback=settings.menage_apps),
+                CallbackQueryHandler(pattern="add_app", callback=settings.menage_apps),
+                CallbackQueryHandler(pattern="info_app", callback=settings.menage_apps),
+                CallbackQueryHandler(pattern="remove_app", callback=settings.menage_apps)
+            ],
+            LIST_APPS: [
+                CallbackQueryHandler(pattern="add_app", callback=settings.menage_apps),
+                CallbackQueryHandler(pattern="remove_app", callback=settings.menage_apps),
+                CallbackQueryHandler(pattern="edit_app", callback=settings.menage_apps),
+                CallbackQueryHandler(pattern="info_app", callback=settings.menage_apps),
+                CallbackQueryHandler(pattern="^back_to_main_settings.+$", callback=settings.menage_apps)
+            ],
             LIST_LAST_CHECKS: []
         },
         fallbacks=[]

@@ -2,9 +2,11 @@ from telegram.constants import ChatAction
 from telegram.ext import CallbackContext, ConversationHandler
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from datetime import timedelta
+from bs4 import BeautifulSoup
 
 import telegram
 import logging
+import requests
 from logging import handlers
 import job_queue
 
@@ -14,7 +16,9 @@ file_handler = handlers.RotatingFileHandler(filename="../misc/logs/settings.log"
                                             maxBytes=1024, backupCount=1)
 settings_logger.addHandler(file_handler)
 
-CHANGE_SETTINGS, MENAGE_APPS, LIST_LAST_CHECKS, MENAGE_APPS_OPTIONS, LIST_APPS = range(5)
+CHANGE_SETTINGS, MENAGE_APPS, LIST_LAST_CHECKS, MENAGE_APPS_OPTIONS, LIST_APPS, ADD_APP = range(5)
+
+LINK_OR_NAME = range(1)
 
 
 async def set_defaults(update: Update, context: CallbackContext):
@@ -70,6 +74,8 @@ async def set_defaults(update: Update, context: CallbackContext):
                                            "message_id": context.chat_data["messages_to_delete"],
                                        },
                                        when=2)
+            del context.chat_data["messages_to_delete"]
+
         except ValueError:
             text = ("❌ <b>Usa il formato indicato</b>, non aggiungere, togliere o cambiare lettere."
                     "\n\n🔎 <code>#m#d#h#min#s</code>")
@@ -199,69 +205,21 @@ async def change_settings(update: Update, context: CallbackContext):
 
 
 async def menage_apps(update: Update, context: CallbackContext):
-    if update.callback_query.data == "menage_apps" or update.callback_query.data.startswith("back_to_main_settings"):
-        text = ("🗂 <b>Gestione Applicazioni</b>\n\n"
-                "🔹Da questo menù, puoi visualizzare e gestire le applicazioni.")
+    if update.callback_query:
+        if update.callback_query.data == "menage_apps" or update.callback_query.data.startswith(
+                "back_to_main_settings"):
+            text = ("🗂 <b>Gestione Applicazioni</b>\n\n"
+                    "🔹Da questo menù, puoi visualizzare e gestire le applicazioni.")
 
-        keyboard = [
-            [
-                InlineKeyboardButton(text="📄 Lista App", callback_data="list_apps"),
-                InlineKeyboardButton(text="➕ Aggiungi", callback_data="add_app"),
-                InlineKeyboardButton(text="➖ Rimuovi", callback_data="remove_app")
-            ],
-            [InlineKeyboardButton(text="🔙 Torna Indietro",
-                                  callback_data=f"back_to_main_menu {update.effective_message.id}")]
-        ]
-
-        await parse_conversation_message(data={
-            "chat_id": update.effective_chat.id,
-            "message_id": update.effective_message.message_id,
-            "text": text,
-            "reply_markup": InlineKeyboardMarkup(keyboard),
-            "parse_mode": "HTML"
-        }, context=context)
-
-        return MENAGE_APPS
-
-    if update.callback_query.data == "list_apps" or update.callback_query.data == "go_back_to_list_apps":
-        if len(context.bot_data["apps"]) == 0:
             keyboard = [
                 [
+                    InlineKeyboardButton(text="📄 Lista App", callback_data="list_apps"),
                     InlineKeyboardButton(text="➕ Aggiungi", callback_data="add_app"),
-                    InlineKeyboardButton(text="🔙 Torna Indietro",
-                                         callback_data=f"back_to_main_settings {update.effective_message.id}")
-                ]
-            ]
-            text = ("🅾️ <code>No Apps Yet</code>\n\n"
-                    "🔸Usa la tastiera per aggiungerne")
-
-            await parse_conversation_message(data={
-                "chat_id": update.effective_chat.id,
-                "message_id": update.effective_message.message_id,
-                "text": text,
-                "reply_markup": InlineKeyboardMarkup(keyboard),
-                "parse_mode": "HTML"
-            }, context=context)
-
-        else:
-            keyboard = [
-                [
-                    InlineKeyboardButton(text="➕ Aggiungi", callback_data="add_app"),
-                    InlineKeyboardButton(text="➖ Rimuovi", callback_data="remove_app"),
-                    InlineKeyboardButton(text="🖋 Modifica", callback_data="edit_app")
+                    InlineKeyboardButton(text="➖ Rimuovi", callback_data="remove_app")
                 ],
-                [InlineKeyboardButton(text="🔎 Dettagli App", callback_data="info_app")],
                 [InlineKeyboardButton(text="🔙 Torna Indietro",
-                                      callback_data=f"back_to_main_settings {update.effective_message.id}")]
+                                      callback_data=f"back_to_main_menu {update.effective_message.id}")]
             ]
-
-            text = "👁‍🗨 <b>Watched Apps</b>\n\n"
-            for count, app in enumerate(context.bot_data["apps"], start=1):
-                text += (f"  {count}. {context.bot_data['apps'][str(count)]["app_name"]}\n"
-                         f"    <code>Interval</code> {context.bot_data['apps'][str(count)]["check_interval"]}\n"
-                         f"    <code>Send On Check</code> {context.bot_data['apps'][str(count)]["send_on_check"]}\n")
-
-            text += "\n🆘 Per i dettagli su un'applicazione, scegli 🖋 Modifica\n\n🔸Scegli un'opzione"
 
             await parse_conversation_message(data={
                 "chat_id": update.effective_chat.id,
@@ -271,31 +229,74 @@ async def menage_apps(update: Update, context: CallbackContext):
                 "parse_mode": "HTML"
             }, context=context)
 
-        return LIST_APPS
+            return MENAGE_APPS
 
-    if update.callback_query.data == "add_app" or update.callback_query.data == "go_back_to_add_app":
-        text = "⬇️ <b>Aggiungi App</b>"
+        if update.callback_query.data == "list_apps" or update.callback_query.data == "go_back_to_list_apps":
+            if len(context.bot_data["apps"]) == 0:
+                keyboard = [
+                    [
+                        InlineKeyboardButton(text="➕ Aggiungi", callback_data="add_app"),
+                        InlineKeyboardButton(text="🔙 Torna Indietro",
+                                             callback_data=f"back_to_main_settings {update.effective_message.id}")
+                    ]
+                ]
+                text = ("🅾️ <code>No Apps Yet</code>\n\n"
+                        "🔸Usa la tastiera per aggiungerne")
 
-        keyboard = [
-            [InlineKeyboardButton(text="Luca Fuso Omosessuale", callback_data="suca")]
-        ]
+                await parse_conversation_message(data={
+                    "chat_id": update.effective_chat.id,
+                    "message_id": update.effective_message.message_id,
+                    "text": text,
+                    "reply_markup": InlineKeyboardMarkup(keyboard),
+                    "parse_mode": "HTML"
+                }, context=context)
 
-        await parse_conversation_message(data={
-            "chat_id": update.effective_chat.id,
-            "message_id": update.effective_message.message_id,
-            "text": text,
-            "reply_markup": InlineKeyboardMarkup(keyboard),
-            "parse_mode": "HTML"
-        }, context=context)
+            else:
+                keyboard = [
+                    [
+                        InlineKeyboardButton(text="➕ Aggiungi", callback_data="add_app"),
+                        InlineKeyboardButton(text="➖ Rimuovi", callback_data="remove_app"),
+                        InlineKeyboardButton(text="🖋 Modifica", callback_data="edit_app")
+                    ],
+                    [InlineKeyboardButton(text="🔎 Dettagli App", callback_data="info_app")],
+                    [InlineKeyboardButton(text="🔙 Torna Indietro",
+                                          callback_data=f"back_to_main_settings {update.effective_message.id}")]
+                ]
 
-    if update.callback_query.data == "remove_app" or update.callback_query.data == "go_back_to_remove_app":
-        pass
+                text = "👁‍🗨 <b>Watched Apps</b>\n\n"
+                for count, app in enumerate(context.bot_data["apps"], start=1):
+                    text += (f"  {count}. {context.bot_data['apps'][str(count)]["app_name"]}\n"
+                             f"    <code>Interval</code> {context.bot_data['apps'][str(count)]["check_interval"]}\n"
+                             f"    <code>Send On Check</code> {context.bot_data['apps'][str(count)]["send_on_check"]}\n")
 
-    if update.callback_query.data == "edit_app" or update.callback_query.data == "go_back_to_edit_app":
-        pass
+                text += "\n🆘 Per i dettagli su un'applicazione, scegli 🖋 Modifica\n\n🔸Scegli un'opzione"
 
-    if update.callback_query.data == "info_app" or update.callback_query.data == "go_back_to_info_app":
-        pass
+                await parse_conversation_message(data={
+                    "chat_id": update.effective_chat.id,
+                    "message_id": update.effective_message.message_id,
+                    "text": text,
+                    "reply_markup": InlineKeyboardMarkup(keyboard),
+                    "parse_mode": "HTML"
+                }, context=context)
+
+            return LIST_APPS
+
+        if update.callback_query.data == "add_app" or update.callback_query.data == "go_back_to_add_app":
+            pass
+
+        if update.callback_query.data == "remove_app" or update.callback_query.data == "go_back_to_remove_app":
+            pass
+
+        if update.callback_query.data == "edit_app" or update.callback_query.data == "go_back_to_edit_app":
+            pass
+
+        if update.callback_query.data == "info_app" or update.callback_query.data == "go_back_to_info_app":
+            pass
+
+    else:
+        if "previous_step" in context.chat_data:
+            if context.chat_data["previous_step"] == "add_app":
+                pass
 
 
 async def edit_default_settings(update: Update, context: CallbackContext):
@@ -310,6 +311,103 @@ async def close_menu(update: Update, context: CallbackContext):
         pass
     finally:
         return ConversationHandler.END
+
+
+async def add_app(update: Update, context: CallbackContext):
+
+    if update.callback_query and update.callback_query.data == "add_app":
+        text = "➕ <b>Aggiungi App</b>\n\n"
+
+        if len(context.bot_data["apps"]) != 0:
+            text += "🗃 <u>Elenco</u>\n\n"
+            for count, app in enumerate(context.bot_data["apps"], start=1):
+                text += f"  {count}. {context.bot_data['apps'][str(count)]["app_name"]}\n\n"
+
+        text += "🔸Puoi fornire o il nome dell'app o il link allo store Google Play"
+
+        keyboard = [
+            [InlineKeyboardButton(text="🔙 Torna Indietro",
+                                  callback_data=f"back_to_main_settings {update.effective_message.id}")]
+        ]
+
+        context.chat_data["message_to_delete"] = update.effective_message.id
+
+        await parse_conversation_message(data={
+            "chat_id": update.effective_chat.id,
+            "message_id": update.effective_message.message_id,
+            "text": text,
+            "reply_markup": InlineKeyboardMarkup(keyboard),
+            "parse_mode": "HTML"
+        }, context=context)
+
+        return LINK_OR_NAME
+
+    message = update.effective_message if update.effective_message else None
+
+    if message and "play.google.com" in message:
+        # è stato specificato un link
+        res = requests.get(message.text)
+        if res.status_code != 200:
+            settings_logger.warning(f"Not able to gather link {message.text}")
+            return None
+
+        if name := BeautifulSoup(res.text, "html.parser").find('h1', itemprop='name') is None:
+            keyboard = [
+                [InlineKeyboardButton(text="🔙 Torna Indietro",
+                                      callback_data=f"back_to_main_settings {message.id}")]
+            ]
+            text = ("⚠️ Non sono riuscito a rilevare l'applicazione.\n\n"
+                    "🆘 Se pensi che io abbia fatto un errore, <u>potrebbe essere che la struttura della pagina web "
+                    "del link sia cambiata</u>. In tal caso, <b>prova a scrivere il nome dell'applicazione</b> "
+                    "che dovrei rilevare (non dimenticare spazi, simboli o lettere maiuscole).\n\n"
+                    "🔸Rimanda il link o fornisci il nome esatto dell'applicazione")
+
+            context.chat_data["name_for_fix"] = True
+
+            await parse_conversation_message(context=context, data={
+                "chat_id": update.effective_chat.id,
+                "message_id": message.message_id,
+                "text": text,
+                "reply_markup": InlineKeyboardMarkup(keyboard)
+            })
+
+        else:
+            keyboard = [
+                [InlineKeyboardButton(text="✅ Si", callback_data="app_name_from_link_correct")],
+                [InlineKeyboardButton(text="❌ No", callback_data="app_name_from_link_not_correct")]
+            ]
+            text = f"❔ Il nome dell'applicazione è <code>{name}</code>?"
+
+            await parse_conversation_message(context=context, data={
+                "chat_id": update.effective_chat.id,
+                "message_id": message.message_id,
+                "text": text,
+                "reply_markup": InlineKeyboardMarkup(keyboard)
+            })
+
+    else:
+        if "name_for_fix" in context.chat_data and context.chat_data["name_for_fix"] is True:
+            # il nome è stato mandato per correggere l'analisi della pagina web
+            pass
+
+    if "message_to_delete" in context.chat_data:
+        context.job_queue.run_once(callback=job_queue.scheduled_delete_message,
+                                   data={
+                                       "message_id": context.chat_data["message_to_delete"],
+                                       "chat_id": update.effective_chat.id
+                                   },
+                                   when=2)
+        del context.chat_data["message_to_delete"]
+
+    if message:
+        context.job_queue.run_once(callback=job_queue.scheduled_delete_message,
+                                   data={
+                                       "message_id": message.message_id,
+                                       "chat_id": update.effective_chat.id
+                                   },
+                                   when=2.5)
+
+    return ADD_APP
 
 
 async def parse_conversation_message(context: CallbackContext, data: dict):

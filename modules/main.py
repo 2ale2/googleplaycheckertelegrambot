@@ -35,7 +35,9 @@ file_handler = handlers.RotatingFileHandler(filename="../misc/logs/main.log",
 bot_logger.addHandler(file_handler)
 
 
-CHANGE_SETTINGS, MENAGE_APPS, LIST_LAST_CHECKS, MENAGE_APPS_OPTIONS, LIST_APPS = range(5)
+CHANGE_SETTINGS, MENAGE_APPS, LIST_LAST_CHECKS, MENAGE_APPS_OPTIONS, LIST_APPS, ADD_APP = range(5)
+
+LINK_OR_NAME = range(1)
 
 
 def send_action(action):
@@ -275,9 +277,28 @@ def main():
                 CallbackQueryHandler(pattern="info_app", callback=settings.menage_apps),
                 CallbackQueryHandler(pattern="^back_to_main_settings.+$", callback=settings.menage_apps)
             ],
+            ADD_APP: [
+                MessageHandler(filters=filters.TEXT & filters.Chat(chat_id=os.getenv("ADMIN_ID")),
+                               callback=settings.menage_apps),
+                CallbackQueryHandler(pattern="^back_to_main_settings.+$", callback=settings.menage_apps),
+
+                CallbackQueryHandler(pattern="app_name_from_link_correct", callback=settings.add_app),
+                CallbackQueryHandler(pattern="app_name_from_link_not_correct", callback=settings.add_app)
+            ],
             LIST_LAST_CHECKS: []
         },
-        fallbacks=[]
+        fallbacks=[CallbackQueryHandler(pattern="add_app", callback=settings.menage_apps)]
+    )
+
+    add_app_conv_handler = ConversationHandler(
+        entry_points=[CallbackQueryHandler(pattern="add_app", callback=settings.add_app)],
+        states={
+            LINK_OR_NAME: [
+                MessageHandler(filters=filters.TEXT & filters.Chat(chat_id=os.getenv("ADMIN_ID")),
+                               callback=settings.menage_apps)
+            ]
+        },
+        fallbacks=[CallbackQueryHandler(pattern="settings", callback=settings.change_settings)]
     )
 
     app.add_handler(conv_handler1)

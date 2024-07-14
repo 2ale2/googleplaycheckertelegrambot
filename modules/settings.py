@@ -1,6 +1,6 @@
 from telegram.constants import ChatAction
 from telegram.ext import CallbackContext, ConversationHandler
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, MessageEntity
 from datetime import timedelta
 from bs4 import BeautifulSoup
 
@@ -18,7 +18,7 @@ settings_logger.addHandler(file_handler)
 
 CHANGE_SETTINGS, MENAGE_APPS, LIST_LAST_CHECKS, MENAGE_APPS_OPTIONS, LIST_APPS, ADD_APP = range(5)
 
-LINK_OR_NAME = range(1)
+LINK_OR_NAME, CONFIRM_APP_NAME, FIX_WEBPAGE_ANALYSIS = range(3)
 
 
 async def set_defaults(update: Update, context: CallbackContext):
@@ -267,7 +267,8 @@ async def menage_apps(update: Update, context: CallbackContext):
                 for count, app in enumerate(context.bot_data["apps"], start=1):
                     text += (f"  {count}. {context.bot_data['apps'][str(count)]["app_name"]}\n"
                              f"    <code>Interval</code> {context.bot_data['apps'][str(count)]["check_interval"]}\n"
-                             f"    <code>Send On Check</code> {context.bot_data['apps'][str(count)]["send_on_check"]}\n")
+                             f"    <code>Send On Check</code> {context.bot_data['apps'][str(count)]["send_on_check"]}\n"
+                             )
 
                 text += "\n🆘 Per i dettagli su un'applicazione, scegli 🖋 Modifica\n\n🔸Scegli un'opzione"
 
@@ -344,12 +345,12 @@ async def add_app(update: Update, context: CallbackContext):
 
     message = update.effective_message if update.effective_message else None
 
-    if message and "play.google.com" in message:
+    if message and len(message.parse_entity(MessageEntity.url)) == 1:
         # è stato specificato un link
         res = requests.get(message.text)
         if res.status_code != 200:
             settings_logger.warning(f"Not able to gather link {message.text}")
-            return None
+            raise telegram.error.NetworkError("Not able to get link.")
 
         if name := BeautifulSoup(res.text, "html.parser").find('h1', itemprop='name') is None:
             keyboard = [
@@ -371,11 +372,14 @@ async def add_app(update: Update, context: CallbackContext):
                 "reply_markup": InlineKeyboardMarkup(keyboard)
             })
 
+            return FIX_WEBPAGE_ANALYSIS
+
         else:
             keyboard = [
                 [InlineKeyboardButton(text="✅ Si", callback_data="app_name_from_link_correct")],
                 [InlineKeyboardButton(text="❌ No", callback_data="app_name_from_link_not_correct")]
             ]
+
             text = f"❔ Il nome dell'applicazione è <code>{name}</code>?"
 
             await parse_conversation_message(context=context, data={
@@ -385,9 +389,15 @@ async def add_app(update: Update, context: CallbackContext):
                 "reply_markup": InlineKeyboardMarkup(keyboard)
             })
 
+            return CONFIRM_APP_NAME
+
     else:
         if "name_for_fix" in context.chat_data and context.chat_data["name_for_fix"] is True:
             # il nome è stato mandato per correggere l'analisi della pagina web
+            pass
+
+        else:
+            # il nome è stato mandato al posto del link: bisogna cercarla
             pass
 
     if "message_to_delete" in context.chat_data:

@@ -37,7 +37,7 @@ bot_logger.addHandler(file_handler)
 
 CHANGE_SETTINGS, MENAGE_APPS, LIST_LAST_CHECKS, MENAGE_APPS_OPTIONS, LIST_APPS, ADD_APP = range(5)
 
-LINK_OR_NAME = range(1)
+LINK_OR_NAME, CONFIRM_APP_NAME, FIX_WEBPAGE_ANALYSIS = range(3)
 
 
 def send_action(action):
@@ -294,6 +294,14 @@ def main():
         entry_points=[CallbackQueryHandler(pattern="add_app", callback=settings.add_app)],
         states={
             LINK_OR_NAME: [
+                MessageHandler(filters=filters.TEXT & filters.Chat(chat_id=os.getenv("ADMIN_ID")),
+                               callback=settings.menage_apps)
+            ],
+            CONFIRM_APP_NAME: [
+                CallbackQueryHandler(pattern="app_name_from_link_correct", callback=settings.add_app),
+                CallbackQueryHandler(pattern="app_name_from_link_not_correct", callback=settings.add_app)
+            ],
+            FIX_WEBPAGE_ANALYSIS: [
                 MessageHandler(filters=filters.TEXT & filters.Chat(chat_id=os.getenv("ADMIN_ID")),
                                callback=settings.menage_apps)
             ]

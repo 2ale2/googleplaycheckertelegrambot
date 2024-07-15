@@ -1,6 +1,12 @@
+import datetime
+import os
+
+import requests
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 import telegram
+from google_play_scraper import app
+from google_play_scraper.exceptions import NotFoundError
 
 import logging
 from logging import handlers
@@ -131,3 +137,70 @@ async def scheduled_delete_message(context: ContextTypes.DEFAULT_TYPE):
                                          message_id=context.job.data["message_id"])
     except telegram.error.BadRequest as e:
         job_queue_logger.warning(f'Not able to perform scheduled action: {e}')
+
+
+async def scheduled_app_check(context: ContextTypes.DEFAULT_TYPE):
+    if "app_id" not in context.job.data or "app_link" not in context.job.data or "app_index" not in context.job.data:
+        job_queue_logger.error("'app_id' or 'app_link' or 'app_index' are missing in Job data.")
+        return
+
+    if (res := requests.get(context.job.data["app_link"])).status_code != 200:
+        job_queue_logger.error(f"Not Able to Get Link {context.job.data["app_link"]}: {res.reason}")
+        return
+
+    try:
+        app_details = app(app_id=context.job.data["app_id"])
+    except NotFoundError as e:
+        job_queue_logger.error(f"App '{context.job.data["app_id"]}' not found: {e}")
+    else:
+        index = context.job.data["app_index"]
+        context.bot_data["apps"][index]["last_check"] = datetime.datetime.now()
+        context.bot_data["apps"][index]["next_check"] = (datetime.datetime.now() +
+                                                         context.bot_data["apps"][index]["check_interval"]["timedelta"])
+        new_version = app_details.get("version")
+        update_date = app_details.get("lastUpdatedOn")
+
+        check = new_version != context.bot_data["apps"][index]["current_version"]
+
+        text = None
+        
+        if check:
+            text = (f"🚨 <b>New Update Found</b>\n\n"
+                    f"   🔹App Name: <code>{context.bot_data["apps"][index]["app_name"]}</code>\n"
+                    f"   🔹Registered Version: <code>{context.bot_data["apps"][index]["current_version"]}</code>\n"
+                    f"   🔹New Version: {new_version}\n"
+                    f"   🔹Updated On: <code>{context.bot_data["apps"][index]["last_update"]}</code>\n\n"
+                    f"🔸Scegli un'opzione")
+
+            context.bot_data["apps"][index]["current_version"] = new_version
+            context.bot_data["apps"][index]["last_update"] = update_date
+
+        elif context.bot_data["apps"][index]["send_on_check"]:
+            text = (f"👁‍🗨 <b>Check Performed</b> – No Updates Found\n\n"
+                    f"   🔹App Name: <code>{context.bot_data["apps"][index]["app_name"]}</code>\n"
+                    f"   🔹Registered Version: <code>{context.bot_data["apps"][index]["current_version"]}</code>\n"
+                    f"   🔹Updated On: <code>{update_date}</code>\n\n"
+                    f"🔸Scegli un'opzione")
+
+        if text:
+            message = await context.bot.send_message(
+                chat_id=os.getenv("MY_ID"),
+                text=text,
+                parse_mode="HTML"
+            )
+
+            keyboard = [
+                [
+                    InlineKeyboardButton(text="🪛 Imp. App", callback_data=f"edit_app_from_job {index}"),
+                    InlineKeyboardButton(text="🌐 Vai al Play Store", url=context.bot_data["apps"][index]["app_link"])
+                ],
+                [InlineKeyboardButton(text="🗑 Cancella Messaggio", callback_data=f"delete_check_message {message.id}")]
+            ]
+
+            await context.bot.edit_message_reply_markup(chat_id=os.getenv("MY_ID"),
+                                                        message_id=message.id,
+                                                        reply_markup=InlineKeyboardMarkup(keyboard))
+        else:
+            job_queue_logger.info("No message is sent cause of app settings.")
+
+

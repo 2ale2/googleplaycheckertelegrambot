@@ -1,4 +1,11 @@
+import datetime
+import logging
+import os
+from logging import handlers
+
 import telegram.error
+from dotenv import load_dotenv
+from telegram import Update, InlineKeyboardButton
 from telegram.constants import ChatAction
 from telegram.ext import (
     ApplicationBuilder,
@@ -9,18 +16,10 @@ from telegram.ext import (
     CallbackQueryHandler,
     PicklePersistence, MessageHandler, filters
 )
-from telegram import Update, InlineKeyboardButton
-from dotenv import load_dotenv
-from bs4 import BeautifulSoup
 
-from functools import wraps
-from logging import handlers
-import logging
-import os
-import requests
-
-import settings
 import job_queue
+import settings
+from decorators import send_action
 
 logging.getLogger('httpx').setLevel(logging.WARNING)
 logging.basicConfig(
@@ -35,23 +34,11 @@ file_handler = handlers.RotatingFileHandler(filename="../misc/logs/main.log",
 bot_logger.addHandler(file_handler)
 
 
-CHANGE_SETTINGS, MENAGE_APPS, LIST_LAST_CHECKS, MENAGE_APPS_OPTIONS, LIST_APPS, ADD_APP = range(5)
+CHANGE_SETTINGS, MENAGE_APPS, LIST_LAST_CHECKS, MENAGE_APPS_OPTIONS, LIST_APPS, ADD_APP = range(6)
 
-LINK_OR_NAME, CONFIRM_APP_NAME, FIX_WEBPAGE_ANALYSIS = range(3)
+SEND_LINK, CONFIRM_APP_NAME = range(2)
 
-
-def send_action(action):
-    """Sends `action` while processing func command."""
-
-    def decorator(func):
-        @wraps(func)
-        async def command_func(update, context, *args, **kwargs):
-            await context.bot.send_chat_action(chat_id=update.effective_message.chat_id, action=action)
-            return await func(update, context, *args, **kwargs)
-
-        return command_func
-
-    return decorator
+SET_INTERVAL, CONFIRM_INTERVAL, SEND_ON_CHECK, SET_UP_ENDED = range(4)
 
 
 # noinspection GrazieInspection
@@ -60,11 +47,13 @@ async def set_data(app: Application):
     {
         "apps": {
                 "1": {
-                        "app_name": nome dell'app,
+                        "app_name": nome dell'app
+                        "app_id": id del pacchetto
                         "app_link": link al Play Store
                         "current_version": ultima versione rilevata
                         "last_check_time": data e ora dell'ultimo controllo (serve in caso di arresti anomali)
                         "check_interval": intervallo tra due check
+                        "next_check": data e ora prossimo check
                         "send_on_check": manda un messaggio anche se non è stato trovato un nuovo aggiornamento
                     },
                 ...
@@ -96,15 +85,6 @@ async def set_data(app: Application):
         }
     if "last_checks" not in app.bot_data:
         app.bot_data["last_checks"] = {}
-
-
-async def get_app_name_with_link(link: str):
-    res = requests.get(link)
-    if res.status_code != 200:
-        bot_logger.warning(f"Not able to gather link {link}")
-        return None
-    name = BeautifulSoup(res.text, "html.parser").find('h1', itemprop='name')
-    return name.get_text() if name else None
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -221,6 +201,42 @@ async def send_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return CHANGE_SETTINGS
 
 
+def reset_job_queue(app: Application):
+    for ap in app.bot_data["apps"]:
+        i = app.bot_data["apps"][ap]
+        if i["next_check"] - datetime.datetime.now() < datetime.timedelta(0):
+            app.job_queue.run_once(callback=job_queue.scheduled_app_check,
+                                   data={
+                                       "app_id": i["app_id"],
+                                       "app_link": i["app_link"],
+                                       "app_index": ap
+                                   },
+                                   when=1)
+            app.job_queue.run_repeating(callback=job_queue.scheduled_app_check,
+                                        interval=i["check_interval"]["timedelta"],
+                                        data={
+                                            "app_id": i["app_id"],
+                                            "app_link": i["app_link"],
+                                            "app_index": ap
+                                        })
+        else:
+            app.job_queue.run_once(callback=job_queue.scheduled_app_check,
+                                   data={
+                                       "app_id": i["app_id"],
+                                       "app_link": i["app_link"],
+                                       "app_index": ap
+                                   },
+                                   when=i["next_check"])
+            app.job_queue.run_repeating(callback=job_queue.scheduled_app_check,
+                                        interval=i["check_interval"]["timedelta"],
+                                        data={
+                                            "app_id": i["app_id"],
+                                            "app_link": i["app_link"],
+                                            "app_index": ap
+                                        },
+                                        first=i["next_check"] + i["check_interval"]["timedelta"])
+
+
 def main():
     persistence = PicklePersistence(filepath="../config/persistence")
     app = (ApplicationBuilder().token(os.getenv("BOT_TOKEN")).persistence(persistence).
@@ -251,6 +267,45 @@ def main():
         persistent=True
     )
 
+    set_new_app_conv_handler = ConversationHandler(
+        entry_points=[
+            CallbackQueryHandler(pattern="app_name_from_link_correct", callback=settings.set_app)
+        ],
+        states={
+            SET_INTERVAL: [
+                MessageHandler(filters.TEXT, callback=settings.set_app)
+            ],
+            CONFIRM_INTERVAL: [
+                CallbackQueryHandler(pattern="^interval_incorrect.+$", callback=settings.set_app),
+                CallbackQueryHandler(pattern="^interval_correct.+$", callback=settings.set_app)
+            ],
+            SEND_ON_CHECK: [
+                CallbackQueryHandler(pattern="send_on_check_true", callback=settings.set_app),
+                CallbackQueryHandler(pattern="send_on_check_false", callback=settings.set_app)
+            ],
+            SET_UP_ENDED: [
+                CallbackQueryHandler(pattern="add_app", callback=settings.add_app)
+            ]
+        },
+        fallbacks=[CallbackQueryHandler(pattern="^back_to_main_settings.+$", callback=settings.menage_apps)]
+    )
+
+    add_app_conv_handler = ConversationHandler(
+        entry_points=[CallbackQueryHandler(pattern="add_app", callback=settings.add_app)],
+        states={
+            SEND_LINK: [
+                MessageHandler(
+                    filters=filters.TEXT, callback=settings.add_app),
+            ],
+            CONFIRM_APP_NAME: [
+                set_new_app_conv_handler,
+                CallbackQueryHandler(pattern="app_name_from_link_not_correct", callback=settings.add_app)
+            ]
+        },
+        fallbacks=[CallbackQueryHandler(pattern="^back_to_main_settings.+$", callback=settings.menage_apps),
+                   CallbackQueryHandler(pattern="app_name_from_link_correct", callback=settings.add_app)]
+    )
+
     conv_handler2 = ConversationHandler(
         entry_points=[
             CallbackQueryHandler(pattern="settings", callback=settings.change_settings),
@@ -263,54 +318,28 @@ def main():
                 CallbackQueryHandler(pattern="edit_default_settings", callback=settings.edit_default_settings),
             ],
             MENAGE_APPS: [
+                add_app_conv_handler,
                 CallbackQueryHandler(pattern="back_to_main_menu", callback=send_menu),
-
                 CallbackQueryHandler(pattern="list_apps", callback=settings.menage_apps),
-                CallbackQueryHandler(pattern="add_app", callback=settings.menage_apps),
                 CallbackQueryHandler(pattern="info_app", callback=settings.menage_apps),
                 CallbackQueryHandler(pattern="remove_app", callback=settings.menage_apps)
             ],
             LIST_APPS: [
-                CallbackQueryHandler(pattern="add_app", callback=settings.menage_apps),
                 CallbackQueryHandler(pattern="remove_app", callback=settings.menage_apps),
                 CallbackQueryHandler(pattern="edit_app", callback=settings.menage_apps),
                 CallbackQueryHandler(pattern="info_app", callback=settings.menage_apps),
                 CallbackQueryHandler(pattern="^back_to_main_settings.+$", callback=settings.menage_apps)
             ],
-            ADD_APP: [
-                MessageHandler(filters=filters.TEXT & filters.Chat(chat_id=os.getenv("ADMIN_ID")),
-                               callback=settings.menage_apps),
-                CallbackQueryHandler(pattern="^back_to_main_settings.+$", callback=settings.menage_apps),
-
-                CallbackQueryHandler(pattern="app_name_from_link_correct", callback=settings.add_app),
-                CallbackQueryHandler(pattern="app_name_from_link_not_correct", callback=settings.add_app)
-            ],
             LIST_LAST_CHECKS: []
         },
-        fallbacks=[CallbackQueryHandler(pattern="add_app", callback=settings.menage_apps)]
+        fallbacks=[]
     )
 
-    add_app_conv_handler = ConversationHandler(
-        entry_points=[CallbackQueryHandler(pattern="add_app", callback=settings.add_app)],
-        states={
-            LINK_OR_NAME: [
-                MessageHandler(filters=filters.TEXT & filters.Chat(chat_id=os.getenv("ADMIN_ID")),
-                               callback=settings.menage_apps)
-            ],
-            CONFIRM_APP_NAME: [
-                CallbackQueryHandler(pattern="app_name_from_link_correct", callback=settings.add_app),
-                CallbackQueryHandler(pattern="app_name_from_link_not_correct", callback=settings.add_app)
-            ],
-            FIX_WEBPAGE_ANALYSIS: [
-                MessageHandler(filters=filters.TEXT & filters.Chat(chat_id=os.getenv("ADMIN_ID")),
-                               callback=settings.menage_apps)
-            ]
-        },
-        fallbacks=[CallbackQueryHandler(pattern="settings", callback=settings.change_settings)]
-    )
+    # reset_job_queue(app)
 
     app.add_handler(conv_handler1)
     app.add_handler(conv_handler2)
+    app.add_handler(set_new_app_conv_handler)
 
     app.run_polling()
 

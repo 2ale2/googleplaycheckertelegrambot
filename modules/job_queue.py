@@ -1,5 +1,6 @@
 import datetime
 import os
+import pytz
 
 import requests
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
@@ -14,7 +15,7 @@ from logging import handlers
 job_queue_logger = logging.getLogger("job_queue_logger")
 job_queue_logger.setLevel(logging.WARN)
 formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-file_handler = handlers.RotatingFileHandler(filename="../misc/logs/job_queue.log",
+file_handler = handlers.RotatingFileHandler(filename="./misc/logs/job_queue.log",
                                             maxBytes=1024, backupCount=1)
 file_handler.setFormatter(formatter)
 job_queue_logger.addHandler(file_handler)
@@ -131,9 +132,9 @@ async def scheduled_delete_message(context: ContextTypes.DEFAULT_TYPE):
     if "message_id" not in context.job.data or "chat_id" not in context.job.data:
         job_queue_logger.error("Missing message_id or chat_id in job data")
         raise Exception("Missing 'message_id' or 'chat_id' in job data.")
-    
+
     try:
-        await context.bot.delete_message(chat_id=context.job.data["chat_id"], 
+        await context.bot.delete_message(chat_id=context.job.data["chat_id"],
                                          message_id=context.job.data["message_id"])
     except telegram.error.BadRequest as e:
         job_queue_logger.warning(f'Not able to perform scheduled action: {e}')
@@ -154,8 +155,8 @@ async def scheduled_app_check(context: ContextTypes.DEFAULT_TYPE):
         job_queue_logger.error(f"App '{context.job.data["app_id"]}' not found: {e}")
     else:
         index = context.job.data["app_index"]
-        context.bot_data["apps"][index]["last_check"] = datetime.datetime.now()
-        context.bot_data["apps"][index]["next_check"] = (datetime.datetime.now() +
+        context.bot_data["apps"][index]["last_check"] = datetime.datetime.now(pytz.timezone('Europe/Rome'))
+        context.bot_data["apps"][index]["next_check"] = (datetime.datetime.now(pytz.timezone('Europe/Rome')) +
                                                          context.bot_data["apps"][index]["check_interval"]["timedelta"])
         new_version = app_details.get("version")
         update_date = app_details.get("lastUpdatedOn")
@@ -163,7 +164,7 @@ async def scheduled_app_check(context: ContextTypes.DEFAULT_TYPE):
         check = new_version != context.bot_data["apps"][index]["current_version"]
 
         text = None
-        
+
         if check:
             text = (f"🚨 <b>New Update Found</b>\n\n"
                     f"   🔹App Name: <code>{context.bot_data["apps"][index]["app_name"]}</code>\n"
@@ -202,5 +203,3 @@ async def scheduled_app_check(context: ContextTypes.DEFAULT_TYPE):
                                                         reply_markup=InlineKeyboardMarkup(keyboard))
         else:
             job_queue_logger.info("No message is sent cause of app settings.")
-
-

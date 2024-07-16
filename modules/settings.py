@@ -1,6 +1,9 @@
 import logging
+import os
 from datetime import timedelta, datetime
 from logging import handlers
+
+import pytz
 
 import requests
 import telegram
@@ -15,7 +18,7 @@ import job_queue
 settings_logger = logging.getLogger("settings_logger")
 settings_logger.setLevel(logging.INFO)
 formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-file_handler = handlers.RotatingFileHandler(filename="../misc/logs/settings.log",
+file_handler = handlers.RotatingFileHandler(filename="./misc/logs/settings.log",
                                             maxBytes=1024, backupCount=1)
 file_handler.setFormatter(formatter)
 settings_logger.addHandler(file_handler)
@@ -346,6 +349,8 @@ async def add_app(update: Update, context: CallbackContext):
     not_cquery_message = update.effective_message if update.effective_message and not update.callback_query else None
 
     if not_cquery_message:
+        await context.bot.send_chat_action(chat_id=update.effective_chat.id,
+                                           action=ChatAction.TYPING)
         if len(entities := not_cquery_message.entities) == 1 and entities[0].type == MessageEntity.URL:
             link = update.message.text[entities[0].offset:]
             res = requests.get(link)
@@ -481,13 +486,17 @@ async def add_app(update: Update, context: CallbackContext):
             [
                 InlineKeyboardButton(text="🆘 Scrivi ad @AleLntr", url="https://t.me/AleLntr")
             ],
-            InlineKeyboardButton(text="🔙 Torna Indietro",
-                                 callback_data=f"back_to_main_settings")
+            [
+                InlineKeyboardButton(text="🔙 Torna Indietro",
+                                     callback_data=f"back_to_main_settings")
+            ]
         ]
+
+        context.chat_data["message_to_delete"] = update.effective_message.id
 
         await parse_conversation_message(context=context, data={
             "chat_id": update.effective_chat.id,
-            "message_id": not_cquery_message.message_id,
+            "message_id": update.effective_message.message_id,
             "text": text,
             "reply_markup": InlineKeyboardMarkup(keyboard)
         })
@@ -515,15 +524,36 @@ async def set_app(update: Update, context: CallbackContext):
 
         context.chat_data["message_to_delete"] = update.effective_message.id
 
+        keyboard = [
+            [InlineKeyboardButton(text="⚡️ Use Defaults", callback_data=f"set_default_values")]
+        ]
+
         await parse_conversation_message(context=context,
                                          data={
                                              "chat_id": update.effective_chat.id,
                                              "message_id": update.effective_message.id,
                                              "text": text,
-                                             "reply_markup": None
+                                             "reply_markup": InlineKeyboardMarkup(keyboard)
                                          })
 
         return SET_INTERVAL
+
+    if update.callback_query and update.callback_query.data == "set_default_values":
+        context.bot_data["apps"][str(len(context.bot_data["apps"]) + 1)] = {
+            "app_name": context.chat_data["setting_app"]["app_name"],
+            "app_link": context.chat_data["setting_app"]["app_link"],
+            "current_version": context.chat_data["setting_app"]["current_version"],
+            "last_update": context.chat_data["setting_app"]["last_update"],
+            "app_id": context.chat_data["setting_app"]["app_id"],
+            "last_check": None,
+            "last_check_time": None,
+            "check_interval": context.bot_data["settings"]["default_check_interval"],
+            "send_on_check": context.bot_data["settings"]["default_send_on_check"]
+        }
+
+        del context.chat_data["setting_app"]
+
+        await schedule_job_and_send_settled_app_message(update, context)
 
     if not update.callback_query:
         try:
@@ -639,55 +669,15 @@ async def set_app(update: Update, context: CallbackContext):
             context.chat_data["setting_app"]["check_interval"])
 
         context.bot_data["apps"][str(len(context.bot_data["apps"]))]["next_check"] = (
-                datetime.now() + context.chat_data["setting_app"]["check_interval"]["timedelta"])
+                datetime.now(pytz.timezone('Europe/Rome')) +
+                context.chat_data["setting_app"]["check_interval"]["timedelta"])
         
         context.bot_data["apps"][str(len(context.bot_data["apps"]))]["send_on_check"] = True \
             if update.callback_query.data == "send_on_check_true" else False
 
-        text = (f"☑️ <b>App Settled Successfully</b>\n\n"
-                f"🔹<u>Check Interval</u> ➡ "
-                f"<code>"
-                f"{context.bot_data["apps"][str(len(context.bot_data["apps"]))]["check_interval"]["input"]["months"]}m"
-                f"{context.bot_data["apps"][str(len(context.bot_data["apps"]))]["check_interval"]["input"]["days"]}d"
-                f"{context.bot_data["apps"][str(len(context.bot_data["apps"]))]["check_interval"]["input"]["hours"]}h"
-                f"{context.bot_data["apps"][str(len(context.bot_data["apps"]))]["check_interval"]["input"]["minutes"]}"
-                f"min"
-                f"{context.bot_data["apps"][str(len(context.bot_data["apps"]))]["check_interval"]["input"]["seconds"]}s"
-                f"</code>\n"
-                f"🔹<u>Send On Check</u> ➡ "
-                f"<code>{str(context.bot_data["apps"][str(len(context.bot_data["apps"]))]["send_on_check"])}</code>"
-                f"\n\n")
+        del context.chat_data["setting_app"]
 
-        keyboard = [
-            [
-                InlineKeyboardButton(text="➕ Aggiungi Altra App", callback_data="add_app"),
-                InlineKeyboardButton(text="🔙 Torna Indietro",
-                                     callback_data=f"back_to_main_settings {update.effective_message.id}")
-            ]
-        ]
-
-        await parse_conversation_message(context=context,
-                                         data={
-                                             "chat_id": update.effective_chat.id,
-                                             "message_id": update.effective_message.id,
-                                             "text": text,
-                                             "reply_markup": InlineKeyboardMarkup(keyboard)
-                                         })
-        context.bot_data["apps"][str(len(context.bot_data["apps"]))]["next_check"] = {}
-        timed = context.bot_data["apps"][str(len(context.bot_data["apps"]))]["check_interval"]["timedelta"]
-        context.bot_data["apps"][str(len(context.bot_data["apps"]))]["next_check"] = datetime.now() + timed
-
-        context.job_queue.run_repeating(
-            callback=job_queue.scheduled_app_check,
-            interval=context.bot_data["apps"][str(len(context.bot_data["apps"]))]["check_interval"]["timedelta"],
-            chat_id=update.effective_chat.id,
-            name=context.bot_data["apps"][str(len(context.bot_data["apps"]))]["app_name"],
-            data={
-                "app_link": context.bot_data["apps"][str(len(context.bot_data["apps"]))]["app_link"],
-                "app_id": context.bot_data["apps"][str(len(context.bot_data["apps"]))]["app_id"],
-                "app_index": str(len(context.bot_data["apps"]))
-            }
-        )
+        await schedule_job_and_send_settled_app_message(update, context)
 
 
 async def parse_conversation_message(context: CallbackContext, data: dict):
@@ -720,6 +710,59 @@ async def parse_conversation_message(context: CallbackContext, data: dict):
                                        parse_mode="HTML")
 
 
+async def schedule_job_and_send_settled_app_message(update: Update, context: CallbackContext):
+    text = (f"☑️ <b>App Settled Successfully</b>\n\n"
+            f"🔹<u>Check Interval</u> ➡ "
+            f"<code>"
+            f"{context.bot_data["apps"][str(len(context.bot_data["apps"]))]["check_interval"]["input"]["months"]}m"
+            f"{context.bot_data["apps"][str(len(context.bot_data["apps"]))]["check_interval"]["input"]["days"]}d"
+            f"{context.bot_data["apps"][str(len(context.bot_data["apps"]))]["check_interval"]["input"]["hours"]}h"
+            f"{context.bot_data["apps"][str(len(context.bot_data["apps"]))]["check_interval"]["input"]["minutes"]}"
+            f"min"
+            f"{context.bot_data["apps"][str(len(context.bot_data["apps"]))]["check_interval"]["input"]["seconds"]}s"
+            f"</code>\n"
+            f"🔹<u>Send On Check</u> ➡ "
+            f"<code>{str(context.bot_data["apps"][str(len(context.bot_data["apps"]))]["send_on_check"])}</code>"
+            f"\n\n")
+
+    await context.bot.send_chat_action(chat_id=update.effective_chat.id,
+                                       action=ChatAction.TYPING)
+
+    keyboard = [
+        [
+            InlineKeyboardButton(text="➕ Aggiungi Altra App", callback_data="add_app"),
+            InlineKeyboardButton(text="🔙 Torna Indietro",
+                                 callback_data="back_to_main_settings")
+        ]
+    ]
+
+    context.job_queue.run_once(callback=job_queue.scheduled_send_message,
+                               data={
+                                   "chat_id": update.effective_chat.id,
+                                   "text": text,
+                                   "message_id": update.effective_message.id,
+                                   "keyboard": keyboard
+                               },
+                               when=1.5)
+
+    context.bot_data["apps"][str(len(context.bot_data["apps"]))]["next_check"] = {}
+    timed = context.bot_data["apps"][str(len(context.bot_data["apps"]))]["check_interval"]["timedelta"]
+    context.bot_data["apps"][str(len(context.bot_data["apps"]))]["next_check"] = (
+            datetime.now(pytz.timezone('Europe/Rome')) + timed)
+
+    context.job_queue.run_repeating(
+        callback=job_queue.scheduled_app_check,
+        interval=context.bot_data["apps"][str(len(context.bot_data["apps"]))]["check_interval"]["timedelta"],
+        chat_id=update.effective_chat.id,
+        name=context.bot_data["apps"][str(len(context.bot_data["apps"]))]["app_name"],
+        data={
+            "app_link": context.bot_data["apps"][str(len(context.bot_data["apps"]))]["app_link"],
+            "app_id": context.bot_data["apps"][str(len(context.bot_data["apps"]))]["app_id"],
+            "app_index": str(len(context.bot_data["apps"]))
+        }
+    )
+
+
 async def schedule_messages_to_delete(context: CallbackContext, messages: dict):
     for message in messages:
         check_dict_keys(messages[message], ["time", "chat_id"])
@@ -746,6 +789,14 @@ async def get_app_details_with_link(link: str):
         return None
     else:
         return app_details
+
+
+async def delete_check_message(update: Update, context: CallbackContext):
+    try:
+        await context.bot.delete_message(chat_id=os.getenv("MY_ID"),
+                                         message_id=int(update.callback_query.data.split(" ")[1]))
+    except telegram.error.BadRequest:
+        pass
 
 
 def check_dict_keys(d: dict, keys: list):

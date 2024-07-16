@@ -1,6 +1,8 @@
 import datetime
 import logging
 import os
+
+import pytz
 from logging import handlers
 
 import telegram.error
@@ -14,7 +16,10 @@ from telegram.ext import (
     ContextTypes,
     ConversationHandler,
     CallbackQueryHandler,
-    PicklePersistence, MessageHandler, filters
+    PicklePersistence,
+    MessageHandler,
+    filters,
+    Defaults
 )
 
 import job_queue
@@ -29,7 +34,7 @@ logging.basicConfig(
 
 bot_logger = logging.getLogger("bot_logger")
 bot_logger.setLevel(logging.INFO)
-file_handler = handlers.RotatingFileHandler(filename="../misc/logs/main.log",
+file_handler = handlers.RotatingFileHandler(filename="./misc/logs/main.log",
                                             maxBytes=1024, backupCount=1)
 bot_logger.addHandler(file_handler)
 
@@ -85,6 +90,40 @@ async def set_data(app: Application):
         }
     if "last_checks" not in app.bot_data:
         app.bot_data["last_checks"] = {}
+
+    for ap in app.bot_data["apps"]:
+        i = app.bot_data["apps"][ap]
+        if i["next_check"] - datetime.datetime.now(pytz.timezone('Europe/Rome')) < datetime.timedelta(0):
+            app.job_queue.run_once(callback=job_queue.scheduled_app_check,
+                                   data={
+                                       "app_id": i["app_id"],
+                                       "app_link": i["app_link"],
+                                       "app_index": ap
+                                   },
+                                   when=1)
+            app.job_queue.run_repeating(callback=job_queue.scheduled_app_check,
+                                        interval=i["check_interval"]["timedelta"],
+                                        data={
+                                            "app_id": i["app_id"],
+                                            "app_link": i["app_link"],
+                                            "app_index": ap
+                                        })
+        else:
+            app.job_queue.run_once(callback=job_queue.scheduled_app_check,
+                                   data={
+                                       "app_id": i["app_id"],
+                                       "app_link": i["app_link"],
+                                       "app_index": ap
+                                   },
+                                   when=i["next_check"])
+            app.job_queue.run_repeating(callback=job_queue.scheduled_app_check,
+                                        interval=i["check_interval"]["timedelta"],
+                                        data={
+                                            "app_id": i["app_id"],
+                                            "app_link": i["app_link"],
+                                            "app_index": ap
+                                        },
+                                        first=i["next_check"] + i["check_interval"]["timedelta"])
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -201,45 +240,10 @@ async def send_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return CHANGE_SETTINGS
 
 
-def reset_job_queue(app: Application):
-    for ap in app.bot_data["apps"]:
-        i = app.bot_data["apps"][ap]
-        if i["next_check"] - datetime.datetime.now() < datetime.timedelta(0):
-            app.job_queue.run_once(callback=job_queue.scheduled_app_check,
-                                   data={
-                                       "app_id": i["app_id"],
-                                       "app_link": i["app_link"],
-                                       "app_index": ap
-                                   },
-                                   when=1)
-            app.job_queue.run_repeating(callback=job_queue.scheduled_app_check,
-                                        interval=i["check_interval"]["timedelta"],
-                                        data={
-                                            "app_id": i["app_id"],
-                                            "app_link": i["app_link"],
-                                            "app_index": ap
-                                        })
-        else:
-            app.job_queue.run_once(callback=job_queue.scheduled_app_check,
-                                   data={
-                                       "app_id": i["app_id"],
-                                       "app_link": i["app_link"],
-                                       "app_index": ap
-                                   },
-                                   when=i["next_check"])
-            app.job_queue.run_repeating(callback=job_queue.scheduled_app_check,
-                                        interval=i["check_interval"]["timedelta"],
-                                        data={
-                                            "app_id": i["app_id"],
-                                            "app_link": i["app_link"],
-                                            "app_index": ap
-                                        },
-                                        first=i["next_check"] + i["check_interval"]["timedelta"])
-
-
 def main():
-    persistence = PicklePersistence(filepath="../config/persistence")
+    persistence = PicklePersistence(filepath="./misc/config/persistence")
     app = (ApplicationBuilder().token(os.getenv("BOT_TOKEN")).persistence(persistence).
+           defaults(Defaults(tzinfo=pytz.timezone('Europe/Rome'))).
            post_init(set_data).build())
 
     conv_handler1 = ConversationHandler(
@@ -273,7 +277,8 @@ def main():
         ],
         states={
             SET_INTERVAL: [
-                MessageHandler(filters.TEXT, callback=settings.set_app)
+                MessageHandler(filters.TEXT, callback=settings.set_app),
+                CallbackQueryHandler(pattern="set_default_values", callback=settings.set_app)
             ],
             CONFIRM_INTERVAL: [
                 CallbackQueryHandler(pattern="^interval_incorrect.+$", callback=settings.set_app),
@@ -287,7 +292,8 @@ def main():
                 CallbackQueryHandler(pattern="add_app", callback=settings.add_app)
             ]
         },
-        fallbacks=[CallbackQueryHandler(pattern="^back_to_main_settings.+$", callback=settings.menage_apps)]
+        fallbacks=[CallbackQueryHandler(pattern="^back_to_main_settings.+$", callback=settings.menage_apps)],
+        allow_reentry=True
     )
 
     add_app_conv_handler = ConversationHandler(
@@ -303,7 +309,8 @@ def main():
             ]
         },
         fallbacks=[CallbackQueryHandler(pattern="^back_to_main_settings.+$", callback=settings.menage_apps),
-                   CallbackQueryHandler(pattern="app_name_from_link_correct", callback=settings.add_app)]
+                   CallbackQueryHandler(pattern="app_name_from_link_correct", callback=settings.add_app)],
+        allow_reentry=True
     )
 
     conv_handler2 = ConversationHandler(
@@ -332,14 +339,13 @@ def main():
             ],
             LIST_LAST_CHECKS: []
         },
-        fallbacks=[]
+        fallbacks=[],
+        allow_reentry=True
     )
-
-    # reset_job_queue(app)
 
     app.add_handler(conv_handler1)
     app.add_handler(conv_handler2)
-    app.add_handler(set_new_app_conv_handler)
+    app.add_handler(CallbackQueryHandler(pattern="^delete_check_message.+$", callback=settings.delete_check_message))
 
     app.run_polling()
 

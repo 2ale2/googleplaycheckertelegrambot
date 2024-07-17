@@ -15,7 +15,7 @@ from logging import handlers
 job_queue_logger = logging.getLogger("job_queue_logger")
 job_queue_logger.setLevel(logging.WARN)
 formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-file_handler = handlers.RotatingFileHandler(filename="./misc/logs/job_queue.log",
+file_handler = handlers.RotatingFileHandler(filename="../misc/logs/job_queue.log",
                                             maxBytes=1024, backupCount=1)
 file_handler.setFormatter(formatter)
 job_queue_logger.addHandler(file_handler)
@@ -161,7 +161,8 @@ async def scheduled_app_check(context: ContextTypes.DEFAULT_TYPE):
         new_version = app_details.get("version")
         update_date = app_details.get("lastUpdatedOn")
 
-        check = new_version != context.bot_data["apps"][index]["current_version"]
+        check = (new_version != context.bot_data["apps"][index]["current_version"] or
+                 update_date != context.bot_data["apps"][index]["last_update"])
 
         text = None
 
@@ -171,7 +172,16 @@ async def scheduled_app_check(context: ContextTypes.DEFAULT_TYPE):
                     f"   🔹Registered Version: <code>{context.bot_data["apps"][index]["current_version"]}</code>\n"
                     f"   🔹New Version: {new_version}\n"
                     f"   🔹Updated On: <code>{context.bot_data["apps"][index]["last_update"]}</code>\n\n"
-                    f"🔸Scegli un'opzione")
+                    f"🔸Scegli un'opzione") if new_version != 'Varies with device' else (
+                f"🚨 <b>New Update Found</b>\n\n"
+                f"   🔹App Name: <code>{context.bot_data["apps"][index]["app_name"]}</code>\n"
+                f"   🔹Registered Version: ⚠️ <code>{context.bot_data["apps"][index]["current_version"]}</code>\n"
+                f"   🔹New Version: {new_version}\n"
+                f"   🔹Updated On: <code>{context.bot_data["apps"][index]["last_update"]}</code>\n\n"
+                f"🗒 Siccome la versione cambia a seconda del dispositivo, potrebbe essere che l'aggiornamento non"
+                f" riguardi il client di interesse.\n\n"
+                f"🔸Scegli un'opzione"
+            )
 
             context.bot_data["apps"][index]["current_version"] = new_version
             context.bot_data["apps"][index]["last_update"] = update_date

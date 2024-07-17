@@ -34,7 +34,7 @@ logging.basicConfig(
 
 bot_logger = logging.getLogger("bot_logger")
 bot_logger.setLevel(logging.INFO)
-file_handler = handlers.RotatingFileHandler(filename="./misc/logs/main.log",
+file_handler = handlers.RotatingFileHandler(filename="../misc/logs/main.log",
                                             maxBytes=1024, backupCount=1)
 bot_logger.addHandler(file_handler)
 
@@ -44,6 +44,8 @@ CHANGE_SETTINGS, MENAGE_APPS, LIST_LAST_CHECKS, MENAGE_APPS_OPTIONS, LIST_APPS, 
 SEND_LINK, CONFIRM_APP_NAME = range(2)
 
 SET_INTERVAL, CONFIRM_INTERVAL, SEND_ON_CHECK, SET_UP_ENDED = range(4)
+
+EDIT_SELECT_APP, EDIT_INVERVAL = range(2)
 
 
 # noinspection GrazieInspection
@@ -241,7 +243,7 @@ async def send_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 def main():
-    persistence = PicklePersistence(filepath="./misc/config/persistence")
+    persistence = PicklePersistence(filepath="../misc/config/persistence")
     app = (ApplicationBuilder().token(os.getenv("BOT_TOKEN")).persistence(persistence).
            defaults(Defaults(tzinfo=pytz.timezone('Europe/Rome'))).
            post_init(set_data).build())
@@ -311,6 +313,25 @@ def main():
         fallbacks=[CallbackQueryHandler(pattern="^back_to_main_settings.+$", callback=settings.menage_apps),
                    CallbackQueryHandler(pattern="app_name_from_link_correct", callback=settings.add_app)],
         allow_reentry=True
+    )
+
+    app_names = settings.create_edit_app_list(app.bot_data)
+
+    edit_app_conv_handler = ConversationHandler(
+        entry_points=[
+            CallbackQueryHandler(pattern="edit_app", callback=settings.edit_app),
+            CallbackQueryHandler(pattern="go_back_to_edit_app", callback=settings.edit_app)
+        ],
+        states={
+            EDIT_SELECT_APP: [
+                MessageHandler(filters.TEXT, callback=settings.edit_app),
+                MessageHandler(filters.Text(strings=app_names), callback=settings.edit_app)
+            ],
+            EDIT_INVERVAL: [
+
+            ]
+        },
+        fallbacks=[]
     )
 
     conv_handler2 = ConversationHandler(

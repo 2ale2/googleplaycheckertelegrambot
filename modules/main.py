@@ -45,7 +45,7 @@ SEND_LINK, CONFIRM_APP_NAME = range(2)
 
 SET_INTERVAL, CONFIRM_INTERVAL, SEND_ON_CHECK, SET_UP_ENDED = range(4)
 
-EDIT_SELECT_APP, EDIT_INVERVAL = range(2)
+EDIT_SELECT_APP, EDIT_INTERVAL = range(2)
 
 
 # noinspection GrazieInspection
@@ -327,8 +327,8 @@ def main():
                 MessageHandler(filters.TEXT, callback=settings.edit_app),
                 MessageHandler(filters.Text(strings=app_names), callback=settings.edit_app)
             ],
-            EDIT_INVERVAL: [
-
+            EDIT_INTERVAL: [
+                CallbackQueryHandler(pattern="set_default_values", callback=settings.edit_app)
             ]
         },
         fallbacks=[]
@@ -347,6 +347,7 @@ def main():
             ],
             MENAGE_APPS: [
                 add_app_conv_handler,
+                edit_app_conv_handler,
                 CallbackQueryHandler(pattern="back_to_main_menu", callback=send_menu),
                 CallbackQueryHandler(pattern="list_apps", callback=settings.menage_apps),
                 CallbackQueryHandler(pattern="info_app", callback=settings.menage_apps),
@@ -366,7 +367,8 @@ def main():
 
     app.add_handler(conv_handler1)
     app.add_handler(conv_handler2)
-    app.add_handler(CallbackQueryHandler(pattern="^delete_check_message.+$", callback=settings.delete_check_message))
+    app.add_handler(CallbackQueryHandler(pattern="^delete_check_message.+$",
+                                         callback=settings.delete_callback_query_message))
 
     app.run_polling()
 

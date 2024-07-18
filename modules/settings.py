@@ -7,11 +7,12 @@ import pytz
 
 import requests
 import telegram
+from time import sleep
 from google_play_scraper import app
 from google_play_scraper.exceptions import NotFoundError
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, MessageEntity
 from telegram.constants import ChatAction
-from telegram.ext import CallbackContext, ConversationHandler
+from telegram.ext import CallbackContext, ConversationHandler, ContextTypes
 
 import job_queue
 
@@ -29,20 +30,20 @@ SEND_LINK, CONFIRM_APP_NAME = range(2)
 
 SET_INTERVAL, CONFIRM_INTERVAL, SEND_ON_CHECK, SET_UP_ENDED = range(4)
 
-EDIT_SELECT_APP, EDIT_INVERVAL = range(2)
+EDIT_SELECT_APP, EDIT_INTERVAL = range(2)
 
 
 async def set_defaults(update: Update, context: CallbackContext):
     if update.callback_query is not None and (update.callback_query.data.startswith("set_defaults") or
                                               update.callback_query.data.startswith("interval_incorrect")):
         if len(li := update.callback_query.data.split(" ")) > 1:
-            try:
-                await context.bot.delete_message(chat_id=update.effective_chat.id,
-                                                 message_id=int(li[1]))
-            except telegram.error.BadRequest:
-                pass
+            await delete_message(context=context, message_id=int(li[1]), chat_id=update.effective_chat.id)
 
         context.bot_data["settings"]["tutorial"] = True
+
+        await context.bot.send_chat_action(chat_id=update.effective_chat.id, action=ChatAction.TYPING)
+
+        sleep(1)
 
         message = await context.bot.send_message(chat_id=update.effective_chat.id,
                                                  text="🔧 <b>Setting Default Values</b>\n\n"
@@ -76,16 +77,17 @@ async def set_defaults(update: Update, context: CallbackContext):
             context.job_queue.run_once(callback=job_queue.scheduled_delete_message,
                                        data={
                                            "chat_id": update.effective_chat.id,
-                                           "message_id": update.message.id,
+                                           "message_id": context.chat_data["messages_to_delete"],
                                        },
-                                       when=2.5)
+                                       when=2)
 
             context.job_queue.run_once(callback=job_queue.scheduled_delete_message,
                                        data={
                                            "chat_id": update.effective_chat.id,
-                                           "message_id": context.chat_data["messages_to_delete"],
+                                           "message_id": update.message.id,
                                        },
-                                       when=2)
+                                       when=2.5)
+
             del context.chat_data["messages_to_delete"]
 
         except ValueError:
@@ -113,6 +115,8 @@ async def set_defaults(update: Update, context: CallbackContext):
                     f"▫️ <code>{hours}</code> ore\n"
                     f"▫️ <code>{minutes}</code> minuti\n"
                     f"▫️ <code>{seconds}</code> secondi")
+            await context.bot.send_chat_action(chat_id=update.effective_chat.id, action=ChatAction.TYPING)
+            sleep(1)
             message = await context.bot.send_message(chat_id=update.effective_chat.id,
                                                      text=text,
                                                      parse_mode="HTML")
@@ -129,16 +133,18 @@ async def set_defaults(update: Update, context: CallbackContext):
 
     if update.callback_query.data.startswith("interval_correct"):
         if len(li := update.callback_query.data.split(" ")) > 1:
-            try:
-                await context.bot.delete_message(chat_id=update.effective_chat.id,
-                                                 message_id=int(li[1]))
-            except telegram.error.BadRequest:
-                pass
+            await delete_message(context=context, chat_id=update.effective_chat.id,
+                                 message_id=int(li[1]))
+
         text = ("🔧 <b>Setting Default Values</b>\n\n"
                 "➡ <u>Default Send On Check</u> – Scegli se, di default, ti verrà mandato un messaggio <b>solo "
                 "quando viene trovato un aggiornamento</b> (<code>False</code>) o <b>ad ogni controllo</b>"
                 " (<code>True</code>)."
                 "\n\n🔹Potrai cambiare questa impostazione in seguito.")
+
+        await context.bot.send_chat_action(chat_id=update.effective_chat.id, action=ChatAction.TYPING)
+
+        sleep(1)
 
         message = await context.bot.send_message(chat_id=update.effective_chat.id,
                                                  text=text,
@@ -156,11 +162,9 @@ async def set_defaults(update: Update, context: CallbackContext):
 
     if update.callback_query.data.startswith("default_send_on_check"):
         if len(li := update.callback_query.data.split(" ")) > 1:
-            try:
-                await context.bot.delete_message(chat_id=update.effective_chat.id,
-                                                 message_id=int(li[1]))
-            except telegram.error.BadRequest:
-                pass
+            await delete_message(context=context, chat_id=update.effective_chat.id,
+                                 message_id=int(li[1]))
+
         if update.callback_query.data.startswith("default_send_on_check_true"):
             context.bot_data["settings"]["default_send_on_check"] = True
         else:
@@ -168,29 +172,31 @@ async def set_defaults(update: Update, context: CallbackContext):
 
         interval_input = context.bot_data["settings"]["default_check_interval"]["input"]
 
-        keyboard = [
-            [InlineKeyboardButton(text="⏭ Procedi", callback_data="default_setting_finished {}")]
-        ]
+        text = (f"☑️ <b>Setting Completed</b>\n\n"
+                f"🔸 <u>Default Interval</u> – "
+                f"<code>{interval_input["months"]}m"
+                f"{interval_input["days"]}d"
+                f"{interval_input["hours"]}h"
+                f"{interval_input["minutes"]}min"
+                f"{interval_input["seconds"]}s</code>\n"
+                f"🔸 <u>Default Send On Check</u> – "
+                f"<code>{str(context.bot_data["settings"]["default_send_on_check"])}"
+                f"</code>\n\n"
+                f"🔹Premi il tasto sotto per procedere.")
+
         await context.bot.send_chat_action(chat_id=update.effective_chat.id,
                                            action=ChatAction.TYPING)
-        context.job_queue.run_once(callback=job_queue.scheduled_send_message,
-                                   data={
-                                       "chat_id": update.effective_chat.id,
-                                       "text": f"☑️ <b>Setting Completed</b>\n\n"
-                                               f"🔸 <u>Default Interval</u> – "
-                                               f"<code>{interval_input["months"]}m"
-                                               f"{interval_input["days"]}d"
-                                               f"{interval_input["hours"]}h"
-                                               f"{interval_input["minutes"]}min"
-                                               f"{interval_input["seconds"]}s</code>\n"
-                                               f"🔸 <u>Default Send On Check</u> – "
-                                               f"<code>{str(context.bot_data["settings"]["default_send_on_check"])}"
-                                               f"</code>\n\n"
-                                               f"🔹Premi il tasto sotto per procedere.",
-                                       "keyboard": keyboard,
-                                       "close_button": [1, 1]
-                                   },
-                                   when=1)
+        sleep(1)
+        message = await context.bot.send_message(chat_id=update.effective_chat.id,
+                                                 text=text,
+                                                 parse_mode="HTML")
+        keyboard = [
+            [InlineKeyboardButton(text="⏭ Procedi", callback_data=f"default_setting_finished {message.id}")]
+        ]
+
+        await context.bot.edit_message_reply_markup(chat_id=update.effective_chat.id,
+                                                    message_id=message.id,
+                                                    reply_markup=InlineKeyboardMarkup(keyboard))
         return ConversationHandler.END
 
 
@@ -221,17 +227,40 @@ async def menage_apps(update: Update, context: CallbackContext):
     if update.callback_query:
         if update.callback_query.data == "menage_apps" or update.callback_query.data.startswith(
                 "back_to_main_settings"):
+
+            if "format_message" in context.chat_data:
+                await delete_message(context=context,
+                                     message_id=context.chat_data["format_message"],
+                                     chat_id=update.effective_chat.id)
+                del context.chat_data["format_message"]
+
+            if "message_to_delete" in context.chat_data:
+                await schedule_messages_to_delete(context=context,
+                                                  messages={
+                                                      int(context.chat_data["message_to_delete"]): {
+                                                          "chat_id": update.effective_chat.id,
+                                                          "time": 2
+                                                      }
+                                                  })
+
+                del context.chat_data["message_to_delete"]
+
             text = ("🗂 <b>Gestione Applicazioni</b>\n\n"
                     "🔹Da questo menù, puoi visualizzare e gestire le applicazioni.")
 
             keyboard = [
                 [
-                    InlineKeyboardButton(text="📄 Lista App", callback_data="list_apps"),
+                    InlineKeyboardButton(text="✏️ Modifica", callback_data="edit_app"),
                     InlineKeyboardButton(text="➕ Aggiungi", callback_data="add_app"),
                     InlineKeyboardButton(text="➖ Rimuovi", callback_data="remove_app")
                 ],
-                [InlineKeyboardButton(text="🔙 Torna Indietro",
-                                      callback_data=f"back_to_main_menu {update.effective_message.id}")]
+                [
+                    InlineKeyboardButton(text="📄 Lista App", callback_data="list_apps")
+                ],
+                [
+                    InlineKeyboardButton(text="🔙 Torna Indietro",
+                                         callback_data=f"back_to_main_menu {update.effective_message.id}")
+                ]
             ]
 
             await parse_conversation_message(context=context,
@@ -309,13 +338,10 @@ async def edit_default_settings(update: Update, context: CallbackContext):
 
 
 async def close_menu(update: Update, context: CallbackContext):
-    try:
-        await context.bot.delete_message(chat_id=update.effective_chat.id,
-                                         message_id=int(update.callback_query.data.split(" ")[1]))
-    except telegram.error.BadRequest:
-        pass
-    finally:
-        return ConversationHandler.END
+    await delete_message(context=context, chat_id=update.effective_chat.id,
+                         message_id=int(update.callback_query.data.split(" ")[1]))
+
+    return ConversationHandler.END
 
 
 async def add_app(update: Update, context: CallbackContext):
@@ -329,7 +355,7 @@ async def add_app(update: Update, context: CallbackContext):
 
         text += "🔸Manda il link all'applicazione su Google Play"
 
-        context.chat_data["message_to_delete"] = update.effective_message.id
+        context.chat_data["send_link_message"] = update.effective_message.id
 
         await parse_conversation_message(data={
             "chat_id": update.effective_chat.id,
@@ -346,6 +372,11 @@ async def add_app(update: Update, context: CallbackContext):
         await context.bot.send_chat_action(chat_id=update.effective_chat.id,
                                            action=ChatAction.TYPING)
         if len(entities := not_cquery_message.entities) == 1 and entities[0].type == MessageEntity.URL:
+            if "message_to_delete" in context.chat_data:
+                await delete_message(context=context, chat_id=update.effective_chat.id,
+                                     message_id=context.chat_data["message_to_delete"])
+                del context.chat_data["message_to_delete"]
+
             link = update.message.text[entities[0].offset:]
             res = requests.get(link)
 
@@ -374,13 +405,23 @@ async def add_app(update: Update, context: CallbackContext):
                         "Potrebbe essere un problema di API o l'applicazione potrebbe essere stata rimossa.\n\n"
                         "🔸Contatta @AleLntr per risolvere il problema, o manda un altro link")
 
-                await parse_conversation_message(context=context,
-                                                 data={
-                                                     "chat_id": update.effective_chat.id,
-                                                     "message_id": not_cquery_message.message_id,
-                                                     "text": text,
-                                                     "reply_markup": None
-                                                 })
+                message = await parse_conversation_message(context=context,
+                                                           data={
+                                                               "chat_id": update.effective_chat.id,
+                                                               "message_id": -1,
+                                                               "text": text,
+                                                               "reply_markup": None
+                                                           })
+
+                context.chat_data["message_to_delete"] = message.id
+
+                await schedule_messages_to_delete(context=context,
+                                                  messages={
+                                                      update.effective_message.id: {
+                                                          "chat_id": update.effective_chat.id,
+                                                          "time": 2
+                                                      }
+                                                  })
 
                 return SEND_LINK
 
@@ -410,32 +451,28 @@ async def add_app(update: Update, context: CallbackContext):
                 text = f"❔ Il nome dell'applicazione è <b>{name}</b>?" \
                     if name else (f"⚠️ Il nome dell'applicazione è <code>None</code>. È possibile che ci sia "
                                   f"un problema di API o di struttura della pagina web.\n\n"
-                                  f"🔸Contatta @AleLntr per risolvere il problema")
+                                  f"🔸Contatta @AleLntr per risolvere il problema, oppure <u>invia un altro link</u>")
 
-                await parse_conversation_message(context=context, data={
-                    "chat_id": update.effective_chat.id,
-                    "message_id": not_cquery_message.message_id,
-                    "text": text,
-                    "reply_markup": InlineKeyboardMarkup(keyboard) if keyboard else None
-                })
+                message = await parse_conversation_message(context=context,
+                                                           data={
+                                                               "chat_id": update.effective_chat.id,
+                                                               "message_id": -1,
+                                                               "text": text,
+                                                               "reply_markup": InlineKeyboardMarkup(
+                                                                   keyboard) if keyboard else None
+                                                           })
 
-                if "message_to_delete" in context.chat_data:
-                    # noinspection DuplicatedCode
-                    await schedule_messages_to_delete(context=context,
-                                                      messages={
-                                                          str(not_cquery_message.id): {
-                                                              "time": 2,
-                                                              "chat_id": update.effective_chat.id,
-                                                          },
-                                                          str(context.chat_data["message_to_delete"]): {
-                                                              "time": 2.5,
-                                                              "chat_id": update.effective_chat.id,
-                                                          }
-                                                      })
+                context.chat_data["message_to_delete"] = message.id
 
-                    del context.chat_data["message_to_delete"]
+                await schedule_messages_to_delete(context=context,
+                                                  messages={
+                                                      update.effective_message.id: {
+                                                          "chat_id": update.effective_chat.id,
+                                                          "time": 2
+                                                      }
+                                                  })
 
-                return CONFIRM_APP_NAME
+                return CONFIRM_APP_NAME if name else SEND_LINK
 
         else:
             keyboard = [
@@ -447,28 +484,23 @@ async def add_app(update: Update, context: CallbackContext):
             ]
             text = "❌ Non hai mandato un link valido o hai mandato più di un link nello stesso messaggio."
 
-            await parse_conversation_message(context=context,
-                                             data={
-                                                 "chat_id": update.effective_chat.id,
-                                                 "message_id": not_cquery_message.message_id,
-                                                 "text": text,
-                                                 "reply_markup": InlineKeyboardMarkup(keyboard)
-                                             })
+            message = await parse_conversation_message(context=context,
+                                                       data={
+                                                           "chat_id": update.effective_chat.id,
+                                                           "message_id": -1,
+                                                           "text": text,
+                                                           "reply_markup": InlineKeyboardMarkup(keyboard)
+                                                       })
 
-            # noinspection DuplicatedCode
             await schedule_messages_to_delete(context=context,
                                               messages={
-                                                  str(not_cquery_message.id): {
+                                                  int(not_cquery_message.id): {
                                                       "time": 2,
-                                                      "chat_id": update.effective_chat.id,
-                                                  },
-                                                  str(context.chat_data["message_to_delete"]): {
-                                                      "time": 2.5,
                                                       "chat_id": update.effective_chat.id,
                                                   }
                                               })
 
-            del context.chat_data["message_to_delete"]
+            context.chat_data["message_to_delete"] = message.id
 
             return SEND_LINK
 
@@ -486,8 +518,6 @@ async def add_app(update: Update, context: CallbackContext):
             ]
         ]
 
-        context.chat_data["message_to_delete"] = update.effective_message.id
-
         await parse_conversation_message(context=context, data={
             "chat_id": update.effective_chat.id,
             "message_id": update.effective_message.message_id,
@@ -501,6 +531,12 @@ async def add_app(update: Update, context: CallbackContext):
 async def set_app(update: Update, context: CallbackContext):
     if update.callback_query and (update.callback_query.data == "app_name_from_link_correct" or
                                   update.callback_query.data.startswith("interval_incorrect")):
+        if "send_link_message" in context.chat_data:
+            await delete_message(context=context,
+                                 chat_id=update.effective_chat.id,
+                                 message_id=context.chat_data["send_link_message"])
+            del context.chat_data["send_link_message"]
+
         # inizio procedura di settaggio
         text = ("🪛 <b>App Set Up</b>\n\n"
                 "🔸<u>Intervallo di Controllo</u> – L'intervallo tra due aggiornamenti\n\n"
@@ -521,6 +557,8 @@ async def set_app(update: Update, context: CallbackContext):
         keyboard = [
             [InlineKeyboardButton(text="⚡️ Use Defaults", callback_data=f"set_default_values")]
         ]
+
+        sleep(1)
 
         await parse_conversation_message(context=context,
                                          data={
@@ -558,20 +596,6 @@ async def set_app(update: Update, context: CallbackContext):
             minutes = int(update.message.text.split('min')[0].split('h')[1])
             seconds = int(update.message.text.split('s')[0].split('min')[1])
 
-            if "message_to_delete" in context.chat_data:
-                await schedule_messages_to_delete(context=context,
-                                                  messages={
-                                                      str(update.effective_message.id): {
-                                                          "time": 2.5,
-                                                          "chat_id": update.effective_chat.id
-                                                      },
-                                                      str(context.chat_data["message_to_delete"]): {
-                                                          "time": 2,
-                                                          "chat_id": update.effective_chat.id
-                                                      }
-                                                  })
-                del context.chat_data["message_to_delete"]
-
         except ValueError:
             text = ("❌ <b>Usa il formato indicato</b>, non aggiungere, togliere o cambiare lettere."
                     "\n\n🔎 <code>#m#d#h#min#s</code>")
@@ -579,6 +603,20 @@ async def set_app(update: Update, context: CallbackContext):
                                            text=text, parse_mode="HTML")
             return 2
         else:
+            if "message_to_delete" in context.chat_data:
+                await schedule_messages_to_delete(context=context,
+                                                  messages={
+                                                      int(update.effective_message.id): {
+                                                          "time": 2.5,
+                                                          "chat_id": update.effective_chat.id
+                                                      },
+                                                      int(context.chat_data["message_to_delete"]): {
+                                                          "time": 2,
+                                                          "chat_id": update.effective_chat.id
+                                                      }
+                                                  })
+                del context.chat_data["message_to_delete"]
+
             context.chat_data["setting_app"]["check_interval"] = {
                 "input": {
                     "days": days,
@@ -607,6 +645,9 @@ async def set_app(update: Update, context: CallbackContext):
                                          callback_data=f"interval_correct {message.id}"),
                     InlineKeyboardButton(text="❌ Non è corretto.",
                                          callback_data=f"interval_incorrect {message.id}")
+                ],
+                [
+                    InlineKeyboardButton(text="🔙 Torna Indietro", callback_data=f"back_to_main_settings {message.id}")
                 ]
             ]
 
@@ -617,12 +658,9 @@ async def set_app(update: Update, context: CallbackContext):
             return CONFIRM_INTERVAL
 
     if update.callback_query and update.callback_query.data.startswith("interval_correct"):
-        if len(li := update.callback_query.data.split(" ")) > 1:
-            try:
-                await context.bot.delete_message(chat_id=update.effective_chat.id,
-                                                 message_id=int(li[1]))
-            except telegram.error.BadRequest:
-                pass
+        await delete_message(context=context,
+                             chat_id=update.effective_chat.id,
+                             message_id=int(update.callback_query.data.split(" ")[1]))
 
         text = ("🪛 <b>App Set Up</b>\n\n"
                 "🔸<u>Send On Check</u> – Scegli se ti verrà mandato un messaggio: <b>solo quando viene trovato"
@@ -640,16 +678,16 @@ async def set_app(update: Update, context: CallbackContext):
                                            action=ChatAction.TYPING)
         context.job_queue.run_once(callback=job_queue.scheduled_send_message,
                                    data={
-                                        "chat_id": update.effective_chat.id,
-                                        "text": text,
-                                        "keyboard": keyboard
+                                       "chat_id": update.effective_chat.id,
+                                       "text": text,
+                                       "keyboard": keyboard
                                    },
                                    when=1.5)
 
         return SEND_ON_CHECK
 
     if update.callback_query and update.callback_query.data.startswith("send_on_check"):
-        context.bot_data["apps"][str(len(context.bot_data["apps"])+1)] = {
+        context.bot_data["apps"][str(len(context.bot_data["apps"]) + 1)] = {
             "app_name": context.chat_data["setting_app"]["app_name"],
             "app_link": context.chat_data["setting_app"]["app_link"],
             "current_version": context.chat_data["setting_app"]["current_version"],
@@ -665,7 +703,7 @@ async def set_app(update: Update, context: CallbackContext):
         context.bot_data["apps"][str(len(context.bot_data["apps"]))]["next_check"] = (
                 datetime.now(pytz.timezone('Europe/Rome')) +
                 context.chat_data["setting_app"]["check_interval"]["timedelta"])
-        
+
         context.bot_data["apps"][str(len(context.bot_data["apps"]))]["send_on_check"] = True \
             if update.callback_query.data == "send_on_check_true" else False
 
@@ -681,101 +719,60 @@ async def edit_app(update: Update, context: CallbackContext):
 
         for ap in context.bot_data["apps"]:
             a = context.bot_data["apps"][ap]
-            text += (f"  {ap}. {a["app_name"]}\n"
-                     f"    <code>Check Interval</code> "
-                     f"{a['check_interval']['input']['months']}\n"
-                     f"{a['check_interval']['input']['days']}\n"
-                     f"{a['check_interval']['input']['hours']}\n"
-                     f"{a['check_interval']['input']['minutes']}\n"
-                     f"{a['check_interval']['input']['seconds']}\n"
-                     f"    <code>Send On Check</code> {a['send_on_check']}\n\n")
+            text += (f"  {ap}. <i>{a["app_name"]}</i>\n"
+                     f"      <u>Check Interval</u> "
+                     f"<code>{a['check_interval']['input']['months']}m</code>"
+                     f"<code>{a['check_interval']['input']['days']}d</code>"
+                     f"<code>{a['check_interval']['input']['hours']}h</code>"
+                     f"<code>{a['check_interval']['input']['minutes']}min</code>"
+                     f"<code>{a['check_interval']['input']['seconds']}s</code>\n"
+                     f"      <u>Send On Check</u> <code>{a['send_on_check']}</code>\n\n")
 
-        text += "🔸Scegli un'applicazione digitando <u>il numero corrispondente</u> o <u>il nome</u>"
+        text += "🔸Scegli un'applicazione digitando il <u>numero corrispondente</u> o il <u>nome</u>"
 
         await parse_conversation_message(context, data={
             "chat_id": update.effective_chat.id,
             "text": text,
-            "message_id": update.message.message_id,
+            "message_id": update.effective_message.message_id,
             "reply_markup": None
         })
 
-        context.chat_data["format_message"] = update.message.message_id
+        context.chat_data["format_message"] = update.effective_message.message_id
 
         return EDIT_SELECT_APP
 
     if not update.callback_query and update.effective_message:
         if "message_to_delete" in context.chat_data:
-            context.job_queue.run_once(callback=job_queue.scheduled_delete_message,
-                                       data={
-                                           "chat_id": update.effective_chat.id,
-                                           "message_id": context.chat_data["message_to_delete"],
-                                       },
-                                       when=2)
+            await schedule_messages_to_delete(context=context,
+                                              messages={
+                                                  int(context.chat_data["message_to_delete"]): {
+                                                      "chat_id": update.effective_chat.id,
+                                                      "time": 2
+                                                  }
+                                              })
 
             del context.chat_data["message_to_delete"]
 
         app_names = create_edit_app_list(context.bot_data)
         message = update.effective_message
+
         if not message.text.strip().isnumeric():
             if message.text not in app_names:
-                await context.bot.send_message(chat_id=update.effective_chat.id,
-                                               text="🔴 <b>App Not Found</b>\n\n"
-                                                    "🔸Scegli un'applicazione dell'elenco",
-                                               parse_mode='HTML')
-                await parse_conversation_message(context=context,
-                                                 data={
-                                                     "chat_id": update.effective_chat.id,
-                                                     "text": "🔴 <b>App Not Found</b>\n\n"
-                                                             "🔸Scegli un'applicazione dell'elenco",
-                                                     "message_id": -1,
-                                                     "reply_markup": None
-                                                 })
-
-                await schedule_messages_to_delete(context=context,
-                                                  messages={
-                                                      str(update.effective_message.id): {
-                                                          "time": 2.5,
-                                                          "chat_id": update.effective_chat.id
-                                                      }
-                                                  })
-                return EDIT_SELECT_APP
-
-            else:
-                for el in app_names:
-                    if message.text == el:
-                        context.chat_data["app_to_edit"] = str(app_names.index(el))
-                        break
-
-                text = ("🔵 <b>App Found</b>\n\n"
-                        "🔸<u>Intervallo di Controllo</u> – L'intervallo tra due aggiornamenti\n\n"
-                        "❔ <b>Format</b>\nFornisci una stringa nel formato ↙\n\n"
-                        "➡   <code>?m?d?h?min?s</code>\n\nsostituendo i <code>?</code> con i "
-                        "valori corrispondenti di:\n\n"
-                        "\t🔹 <code>m</code> – Mesi\n"
-                        "\t🔹 <code>d</code> – Giorni\n"
-                        "\t🔹 <code>h</code> – Ore\n"
-                        "\t🔹 <code>min</code> – Minuti\n"
-                        "\t🔹 <code>s</code> – Secondi\n\n"
-                        "Inserisci tutti i valori corrispondenti anche se nulli.\n\n "
-                        "<b>Esempio</b> 🔎 – <code>0m2d0h15min0s</code>\n\n"
-                        "🔸Fornisci l'intervallo che desideri")
+                await context.bot.send_chat_action(chat_id=update.effective_chat.id, action=ChatAction.TYPING)
+                sleep(1)
+                message = await context.bot.send_message(chat_id=update.effective_chat.id,
+                                                         text="🔴 <b>App Not Found</b>\n\n"
+                                                              "🔸Scegli un'applicazione dell'elenco",
+                                                         parse_mode='HTML')
 
                 keyboard = [
-                    [
-                        InlineKeyboardButton(text="⚡️ Use Defaults", callback_data=f"set_default_values")
-                    ],
-                    [
-                        InlineKeyboardButton(text="🔙 Torna Indietro", callback_data=f"back_to_main_settings")
-                    ]
+                    [InlineKeyboardButton(text="🔙 Torna Indietro",
+                                          callback_data=f"back_to_main_settings {message.id}")]
                 ]
 
-                await parse_conversation_message(context=context,
-                                                 data={
-                                                     "chat_id": update.effective_chat.id,
-                                                     "text": text,
-                                                     "message_id": -1,
-                                                     "reply_markup": InlineKeyboardMarkup(keyboard)
-                                                 })
+                await context.bot.edit_message_reply_markup(chat_id=update.effective_chat.id,
+                                                            message_id=message.id,
+                                                            reply_markup=InlineKeyboardMarkup(keyboard))
 
                 await schedule_messages_to_delete(context=context,
                                                   messages={
@@ -785,18 +782,90 @@ async def edit_app(update: Update, context: CallbackContext):
                                                       }
                                                   })
 
-                return EDIT_INVERVAL
+                context.chat_data["message_to_delete"] = message.id
+                return EDIT_SELECT_APP
 
         if int(message.text.strip()) > len(app_names) or int(message.text.strip()) < 0:
             text = "🔴 <b>Invalid Index</b>\n\n🔸Fornisci un indice valido"
 
-            message = await context.bot.send_message(chat_id=update.effective_chat.id,
-                                                     text=text,
-                                                     parse_mode='HTML')
+            await parse_conversation_message(context=context,
+                                             data={
+                                                 "chat_id": update.effective_chat.id,
+                                                 "text": text,
+                                                 "message_id": -1,
+                                                 "reply_markup": None
+                                             })
+
             context.chat_data["message_to_delete"] = message.id
 
-            return EDIT_INVERVAL
+            return EDIT_SELECT_APP
 
+        context.chat_data["app_index_to_edit"] = str(message.text.strip())
+
+        for el in app_names:
+            if message.text == el:
+                context.chat_data["app_index_to_edit"] = str(app_names.index(el))
+                break
+
+        text = ("🔵 <b>App Found</b>\n\n"
+                "🔸<u>Intervallo di Controllo</u> – L'intervallo tra due aggiornamenti\n\n"
+                "❔ <b>Format</b>\nFornisci una stringa nel formato ↙\n\n"
+                "➡   <code>?m?d?h?min?s</code>\n\nsostituendo i <code>?</code> con i "
+                "valori corrispondenti di:\n\n"
+                "\t🔹 <code>m</code> – Mesi\n"
+                "\t🔹 <code>d</code> – Giorni\n"
+                "\t🔹 <code>h</code> – Ore\n"
+                "\t🔹 <code>min</code> – Minuti\n"
+                "\t🔹 <code>s</code> – Secondi\n\n"
+                "Inserisci tutti i valori corrispondenti anche se nulli.\n\n "
+                "<b>Esempio</b> 🔎 – <code>0m2d0h15min0s</code>\n\n"
+                "🔸Fornisci l'intervallo che desideri")
+
+        keyboard = [
+            [
+                InlineKeyboardButton(text="⚡️ Use Defaults", callback_data=f"set_default_values")
+            ],
+            [
+                InlineKeyboardButton(text="🔙 Torna Indietro", callback_data=f"back_to_main_settings")
+            ]
+        ]
+
+        await parse_conversation_message(context=context,
+                                         data={
+                                             "chat_id": update.effective_chat.id,
+                                             "text": text,
+                                             "message_id": -1,
+                                             "reply_markup": InlineKeyboardMarkup(keyboard),
+                                             "close_button": [2, 1]
+                                         })
+
+        await schedule_messages_to_delete(context=context,
+                                          messages={
+                                              str(update.effective_message.id): {
+                                                  "time": 2.5,
+                                                  "chat_id": update.effective_chat.id
+                                              }
+                                          })
+
+        return EDIT_INTERVAL
+
+    if update.callback_query and update.callback_query.data == "set_default_values":
+        index = context.chat_data["app_index_to_edit"]
+        context.bot_data["apps"][index]["check_interval"] = context.bot_data["settings"]["default_check_interval"]
+        context.bot_data["apps"][index]["send_on_check"] = context.bot_data["settings"]["default_send_on_check"]
+
+        # return EDIT_APP_COMPLETE
+    ############################# FERMO QUI ###############################
+    if not update.callback_query:
+        try:
+            # noinspection DuplicatedCode
+            months = int(update.message.text.split('m')[0])
+            days = int(update.message.text.split('d')[0].split('m')[1])
+            hours = int(update.message.text.split('h')[0].split('d')[1])
+            minutes = int(update.message.text.split('min')[0].split('h')[1])
+            seconds = int(update.message.text.split('s')[0].split('min')[1])
+        except Exception:
+            pass
 
 
 async def parse_conversation_message(context: CallbackContext, data: dict):
@@ -809,27 +878,41 @@ async def parse_conversation_message(context: CallbackContext, data: dict):
                               callback_data=f"back_to_main_settings {message_id}")]
     ]
 
-    try:
-        if message_id == -1:
-            raise telegram.error.BadRequest
+    reply_markup = reply_markup if reply_markup else InlineKeyboardMarkup(keyboard)
 
+    try:
         await context.bot.edit_message_text(chat_id=chat_id,
                                             message_id=message_id,
                                             text=text,
-                                            reply_markup=(reply_markup
-                                                          if reply_markup is not None
-                                                          else InlineKeyboardMarkup(keyboard)
-                                                          if reply_markup is not False else None),
+                                            reply_markup=(reply_markup if reply_markup is not False else None),
                                             parse_mode="HTML")
+        return None
+
     except telegram.error.BadRequest as e:
         settings_logger.warning(f"Not able to edit message: {e}\nA new one will be sent.")
 
         # se il messaggio è stato rimosso e ne viene mandato un altro, i tasti che contengono un id scatenerebbero
         # un'eccezione nelle fasi successive, ma il 'try-except...pass' ovvia al problema.
-        await context.bot.send_message(chat_id=chat_id,
-                                       text=text,
-                                       reply_markup=reply_markup,
-                                       parse_mode="HTML")
+        message = await context.bot.send_message(chat_id=chat_id,
+                                                 text=text,
+                                                 reply_markup=reply_markup if reply_markup is not False else None,
+                                                 parse_mode="HTML")
+
+        if "close_button" in data:
+            button = keyboard
+            for i in data["close_button"][:-1]:
+                button = button[i - 1]
+
+            # noinspection PyTypeChecker
+            button[data["close_button"][-1] - 1] = InlineKeyboardButton(
+                text="🔙 Torna Indietro",
+                callback_data=f"back_to_main_settings {message_id}"
+            )
+
+            await context.bot.edit_message_reply_markup(chat_id=chat_id,
+                                                        message_id=message.id,
+                                                        reply_markup=InlineKeyboardMarkup(keyboard))
+        return message
 
 
 async def schedule_job_and_send_settled_app_message(update: Update, context: CallbackContext):
@@ -913,10 +996,18 @@ async def get_app_details_with_link(link: str):
         return app_details
 
 
-async def delete_check_message(update: Update, context: CallbackContext):
+async def delete_callback_query_message(update: Update, context: CallbackContext):
     try:
         await context.bot.delete_message(chat_id=os.getenv("MY_ID"),
                                          message_id=int(update.callback_query.data.split(" ")[1]))
+    except telegram.error.BadRequest:
+        pass
+
+
+async def delete_message(context: ContextTypes.DEFAULT_TYPE, chat_id: int, message_id: int):
+    try:
+        await context.bot.delete_message(chat_id=chat_id,
+                                         message_id=message_id)
     except telegram.error.BadRequest:
         pass
 
@@ -937,7 +1028,8 @@ def check_dict_keys(d: dict, keys: list):
 def create_edit_app_list(bot_data: dict) -> list:
     whitelist = set('abcdefghijklmnopqrstuvwxyz ABCDEFGHIJKLMNOPQRSTUVWXYZ')
     app_names = []
-    for a in bot_data["apps"]:
-        app_names.append(''.join(filter(whitelist.__contains__, str(a["app_name"]))))
+    if "apps" in bot_data:
+        for a in bot_data["apps"]:
+            app_names.append(''.join(filter(whitelist.__contains__, str(bot_data["apps"][a]["app_name"]))))
 
-    return app_names
+    return app_names or []

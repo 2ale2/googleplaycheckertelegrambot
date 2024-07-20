@@ -47,6 +47,8 @@ SET_INTERVAL, CONFIRM_INTERVAL, SEND_ON_CHECK, SET_UP_ENDED = range(4)
 
 EDIT_SELECT_APP, EDIT_CONFIRM_APP = range(2)
 
+DELETE_APP_SELECT, DELETE_APP_CONFIRM = range(2)
+
 
 # noinspection GrazieInspection
 async def set_data(app: Application):
@@ -264,8 +266,7 @@ async def send_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def catch_update(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.callback_query and ("edit_from_job" in update.callback_query.data
-                                  or "delete_check_message" in update.callback_query.data):
+    if update.callback_query and ("edit_from_job" in update.callback_query.data):
         print(update.callback_query.data)
         for h in context.application.handlers:
             for j in context.application.handlers[h]:
@@ -333,7 +334,10 @@ def main():
            post_init(set_data).build())
 
     conv_handler1 = ConversationHandler(
-        entry_points=[CommandHandler("start", start)],
+        entry_points=[
+            CommandHandler("start", start),
+            CallbackQueryHandler(pattern="edit_default_settings", callback=settings.set_defaults)
+        ],
         states={
             0: [
                 CallbackQueryHandler(pattern="^print_tutorial.+$", callback=tutorial),
@@ -353,8 +357,7 @@ def main():
             ]
         },
         fallbacks=[],
-        name="default_settings_conv_handler",
-        persistent=True
+        name="default_settings_conv_handler"
     )
 
     set_app_conv_handler = ConversationHandler(
@@ -386,16 +389,14 @@ def main():
         entry_points=[CallbackQueryHandler(pattern="add_app", callback=settings.add_app)],
         states={
             SEND_LINK: [
-                MessageHandler(
-                    filters=filters.TEXT, callback=settings.add_app),
+                MessageHandler(filters=filters.TEXT, callback=settings.add_app),
             ],
             CONFIRM_APP_NAME: [
                 set_app_conv_handler,
                 CallbackQueryHandler(pattern="app_name_from_link_not_correct", callback=settings.add_app),
             ]
         },
-        fallbacks=[CallbackQueryHandler(pattern="^back_to_main_settings.+$", callback=settings.menage_apps),
-                   CallbackQueryHandler(pattern="app_name_from_link_correct", callback=settings.add_app)],
+        fallbacks=[CallbackQueryHandler(pattern="^back_to_main_settings.+$", callback=settings.menage_apps)],
         allow_reentry=True
     )
 
@@ -403,8 +404,7 @@ def main():
 
     edit_app_conv_handler = ConversationHandler(
         entry_points=[
-            CallbackQueryHandler(pattern="edit_app", callback=settings.edit_app),
-            CallbackQueryHandler(pattern="go_back_to_edit_app", callback=settings.edit_app)
+            CallbackQueryHandler(pattern="edit_app", callback=settings.edit_app)
         ],
         states={
             EDIT_SELECT_APP: [
@@ -415,8 +415,22 @@ def main():
                 set_app_conv_handler
             ]
         },
-        fallbacks=[],
+        fallbacks=[CallbackQueryHandler(pattern="^back_to_main_settings.+$", callback=settings.menage_apps)],
         allow_reentry=True
+    )
+
+    delete_app_conv_handler = ConversationHandler(
+        entry_points=[CallbackQueryHandler(pattern="delete_app", callback=settings.remove_app)],
+        states={
+            DELETE_APP_SELECT: [
+                MessageHandler(filters.TEXT, callback=settings.remove_app)
+            ],
+            DELETE_APP_CONFIRM: [
+                CallbackQueryHandler(pattern="suspend_app", callback=settings.remove_app),
+                CallbackQueryHandler(pattern="cancel_remove", callback=settings.remove_app)
+            ]
+        },
+        fallbacks=[CallbackQueryHandler(pattern="confirm_remove", callback=settings.remove_app)]
     )
 
     conv_handler2 = ConversationHandler(
@@ -428,17 +442,14 @@ def main():
             CHANGE_SETTINGS: [
                 CallbackQueryHandler(pattern="settings", callback=settings.change_settings),
                 CallbackQueryHandler(pattern="menage_apps", callback=settings.menage_apps),
-                CallbackQueryHandler(pattern="edit_default_settings", callback=settings.edit_default_settings),
+                conv_handler1,
                 CallbackQueryHandler(pattern="back_to_main_menu", callback=send_menu)
             ],
             MENAGE_APPS: [
                 add_app_conv_handler,
                 edit_app_conv_handler,
                 CallbackQueryHandler(pattern="back_to_main_settings", callback=settings.menage_apps),
-                CallbackQueryHandler(pattern="settings", callback=settings.change_settings),
-                CallbackQueryHandler(pattern="list_apps", callback=settings.menage_apps),
-                CallbackQueryHandler(pattern="info_app", callback=settings.menage_apps),
-                CallbackQueryHandler(pattern="remove_app", callback=settings.menage_apps)
+                CallbackQueryHandler(pattern="settings", callback=settings.change_settings)
             ],
             LIST_APPS: [
                 CallbackQueryHandler(pattern="remove_app", callback=settings.menage_apps),
@@ -452,7 +463,7 @@ def main():
         allow_reentry=True
     )
 
-    # app.add_handler(TypeHandler(Update, callback=catch_update), group=-1)
+    app.add_handler(TypeHandler(Update, callback=catch_update), group=-1)
 
     app.add_handler(conv_handler1)
     app.add_handler(conv_handler2)

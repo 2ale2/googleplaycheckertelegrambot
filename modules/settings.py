@@ -30,7 +30,7 @@ SEND_LINK, CONFIRM_APP_NAME = range(2)
 
 SET_INTERVAL, CONFIRM_INTERVAL, SEND_ON_CHECK, SET_UP_ENDED = range(4)
 
-EDIT_SELECT_APP, EDIT_INTERVAL = range(2)
+EDIT_SELECT_APP, EDIT_CONFIRM_APP = range(2)
 
 
 async def set_defaults(update: Update, context: CallbackContext):
@@ -209,7 +209,7 @@ async def change_settings(update: Update, context: CallbackContext):
             InlineKeyboardButton(text="🗂 Gestisci App", callback_data="menage_apps"),
             InlineKeyboardButton(text="🔧 Imp. Default", callback_data="edit_default_settings")
         ],
-        [InlineKeyboardButton(text="🔙 Menu Principale", callback_data="start_menu")]
+        [InlineKeyboardButton(text="🔙 Menu Principale", callback_data="back_to_main_menu")]
     ]
 
     await parse_conversation_message(context=context,
@@ -259,7 +259,7 @@ async def menage_apps(update: Update, context: CallbackContext):
                 ],
                 [
                     InlineKeyboardButton(text="🔙 Torna Indietro",
-                                         callback_data=f"back_to_main_menu {update.effective_message.id}")
+                                         callback_data=f"settings {update.effective_message.id}")
                 ]
             ]
 
@@ -351,7 +351,7 @@ async def add_app(update: Update, context: CallbackContext):
         if len(context.bot_data["apps"]) != 0:
             text += "🗃 <u>Elenco</u>\n\n"
             for ap in context.bot_data["apps"]:
-                text += f"  {ap}. {context.bot_data['apps'][str(ap)]["app_name"]}\n\n"
+                text += f"  {ap}. {context.bot_data['apps'][str(ap)]["app_name"]}\n"
 
         text += "🔸Manda il link all'applicazione su Google Play"
 
@@ -426,6 +426,12 @@ async def add_app(update: Update, context: CallbackContext):
                 return SEND_LINK
 
             else:
+                if "send_link_message" in context.chat_data:
+                    await delete_message(context=context,
+                                         chat_id=update.effective_chat.id,
+                                         message_id=context.chat_data["send_link_message"])
+                    del context.chat_data["send_link_message"]
+
                 name = app_details.get('title')
                 current_version = app_details.get('version')
                 last_update = datetime.strptime(app_details.get('lastUpdatedOn'), '%b %d, %Y')
@@ -468,13 +474,18 @@ async def add_app(update: Update, context: CallbackContext):
                                                   messages={
                                                       update.effective_message.id: {
                                                           "chat_id": update.effective_chat.id,
-                                                          "time": 2
+                                                          "time": 5
                                                       }
                                                   })
 
                 return CONFIRM_APP_NAME if name else SEND_LINK
 
         else:
+            if "send_link_message" in context.chat_data:
+                await delete_message(context=context, chat_id=update.effective_chat.id,
+                                     message_id=context.chat_data["send_link_message"])
+                del context.chat_data["send_link_message"]
+
             keyboard = [
                 [
                     InlineKeyboardButton(text="🔙 Torna Indietro",
@@ -482,15 +493,15 @@ async def add_app(update: Update, context: CallbackContext):
                     InlineKeyboardButton(text="🆘 Contatta @AleLntr", url='https://t.me/AleLntr')
                 ]
             ]
+
             text = "❌ Non hai mandato un link valido o hai mandato più di un link nello stesso messaggio."
 
-            message = await parse_conversation_message(context=context,
-                                                       data={
-                                                           "chat_id": update.effective_chat.id,
-                                                           "message_id": -1,
-                                                           "text": text,
-                                                           "reply_markup": InlineKeyboardMarkup(keyboard)
-                                                       })
+            message = await parse_conversation_message(context=context, data={
+                "chat_id": update.effective_chat.id,
+                "message_id": -1,
+                "text": text,
+                "reply_markup": InlineKeyboardMarkup(keyboard)
+            })
 
             await schedule_messages_to_delete(context=context,
                                               messages={
@@ -500,11 +511,20 @@ async def add_app(update: Update, context: CallbackContext):
                                                   }
                                               })
 
-            context.chat_data["message_to_delete"] = message.id
+            context.chat_data["send_link_message"] = message.id
 
             return SEND_LINK
 
     if update.callback_query and update.callback_query.data == "app_name_from_link_not_correct":
+        if "message_to_delete" in context.chat_data:
+            del context.chat_data["message_to_delete"]
+
+        if "send_link_message" in context.chat_data:
+            await delete_message(context=context,
+                                 chat_id=update.effective_chat.id,
+                                 message_id=context.chat_data["send_link_message"])
+            del context.chat_data["send_link_message"]
+
         text = ("⚠️ Se il nome non è corretto, è possibile che ci sia un problema con l'API di Google Play.\n\n"
                 "🔸Contatta @AleLntr o <u>invia un altro link</u>.")
 
@@ -514,7 +534,7 @@ async def add_app(update: Update, context: CallbackContext):
             ],
             [
                 InlineKeyboardButton(text="🔙 Torna Indietro",
-                                     callback_data=f"back_to_main_settings")
+                                     callback_data=f"back_to_main_settings {update.effective_message.id}")
             ]
         ]
 
@@ -529,13 +549,44 @@ async def add_app(update: Update, context: CallbackContext):
 
 
 async def set_app(update: Update, context: CallbackContext):
+    if update.callback_query and update.callback_query.data == "confirm_app_to_edit":
+        if "edit_message" in context.chat_data:
+            await delete_message(context=context, chat_id=update.effective_chat.id,
+                                 message_id=context.chat_data["edit_message"])
+            del context.chat_data["edit_message"]
+        ap = context.bot_data["apps"][context.chat_data["app_index_to_edit"]]
+        context.chat_data["setting_app"] = {
+            "app_name": ap["app_name"],
+            "app_link": ap["app_link"],
+            "current_version": ap["current_version"],
+            "last_update": ap["last_update"],
+            "app_id": ap["app_id"]
+        }
+
+        context.chat_data["editing"] = True
+
+    if update.callback_query and update.callback_query.data.startswith("edit_app_from_check"):
+        index = update.callback_query.data.split(" ")[1]
+        context.chat_data["app_index_to_edit"] = index
+        ap = context.bot_data["apps"][index]
+        context.chat_data["setting_app"] = {
+            "app_name": ap["app_name"],
+            "app_link": ap["app_link"],
+            "current_version": ap["current_version"],
+            "last_update": ap["last_update"],
+            "app_id": ap["app_id"]
+        }
+
+        context.chat_data["editing"] = True
+
+    adding = False if "editing" in context.chat_data or (
+            update.callback_query and update.callback_query.data.startswith("edit_app_from_check")
+    ) else True
+
     if update.callback_query and (update.callback_query.data == "app_name_from_link_correct" or
-                                  update.callback_query.data.startswith("interval_incorrect")):
-        if "send_link_message" in context.chat_data:
-            await delete_message(context=context,
-                                 chat_id=update.effective_chat.id,
-                                 message_id=context.chat_data["send_link_message"])
-            del context.chat_data["send_link_message"]
+                                  update.callback_query.data.startswith("interval_incorrect") or
+                                  update.callback_query.data == "confirm_app_to_edit" or
+                                  update.callback_query.data.startswith("edit_app_from_check")):
 
         # inizio procedura di settaggio
         text = ("🪛 <b>App Set Up</b>\n\n"
@@ -556,36 +607,53 @@ async def set_app(update: Update, context: CallbackContext):
 
         keyboard = [
             [InlineKeyboardButton(text="⚡️ Use Defaults", callback_data=f"set_default_values")]
+        ] if adding else [
+            [InlineKeyboardButton(text="⚡️ Use Defaults", callback_data=f"edit_set_default_values")]
         ]
 
         sleep(1)
 
-        await parse_conversation_message(context=context,
-                                         data={
-                                             "chat_id": update.effective_chat.id,
-                                             "message_id": update.effective_message.id,
-                                             "text": text,
-                                             "reply_markup": InlineKeyboardMarkup(keyboard)
-                                         })
+        message = await parse_conversation_message(context=context,
+                                                   data={
+                                                       "chat_id": update.effective_chat.id,
+                                                       "message_id": update.effective_message.id,
+                                                       "text": text,
+                                                       "reply_markup": InlineKeyboardMarkup(keyboard)
+                                                   })
+        if message:
+            context.chat_data["message_to_delete"] = message.id
 
         return SET_INTERVAL
 
-    if update.callback_query and update.callback_query.data == "set_default_values":
-        context.bot_data["apps"][str(len(context.bot_data["apps"]) + 1)] = {
-            "app_name": context.chat_data["setting_app"]["app_name"],
-            "app_link": context.chat_data["setting_app"]["app_link"],
-            "current_version": context.chat_data["setting_app"]["current_version"],
-            "last_update": context.chat_data["setting_app"]["last_update"],
-            "app_id": context.chat_data["setting_app"]["app_id"],
-            "last_check": None,
-            "last_check_time": None,
-            "check_interval": context.bot_data["settings"]["default_check_interval"],
-            "send_on_check": context.bot_data["settings"]["default_send_on_check"]
-        }
+    await context.bot.send_chat_action(chat_id=update.effective_chat.id, action=ChatAction.TYPING)
+    sleep(1)
 
-        del context.chat_data["setting_app"]
+    if adding:
+        if update.callback_query and update.callback_query.data == "set_default_values":
+            context.bot_data["apps"][str(len(context.bot_data["apps"]) + 1)] = {
+                "app_name": context.chat_data["setting_app"]["app_name"],
+                "app_link": context.chat_data["setting_app"]["app_link"],
+                "current_version": context.chat_data["setting_app"]["current_version"],
+                "last_update": context.chat_data["setting_app"]["last_update"],
+                "app_id": context.chat_data["setting_app"]["app_id"],
+                "last_check": None,
+                "last_check_time": None,
+                "check_interval": context.bot_data["settings"]["default_check_interval"],
+                "send_on_check": context.bot_data["settings"]["default_send_on_check"]
+            }
 
-        await schedule_job_and_send_settled_app_message(update, context)
+            del context.chat_data["setting_app"]
+
+            await schedule_job_and_send_settled_app_message(update, context)
+            return ConversationHandler.END
+
+    else:
+        if update.callback_query and update.callback_query.data == "edit_set_default_values":
+            index = context.chat_data["app_index_to_edit"]
+            context.bot_data["apps"][index]["check_interval"] = context.bot_data["settings"]["default_check_interval"]
+            context.bot_data["apps"][index]["send_on_check"] = context.bot_data["settings"]["default_send_on_check"]
+            await schedule_job_and_send_settled_app_message(update, context)
+            return ConversationHandler.END
 
     if not update.callback_query:
         try:
@@ -655,6 +723,11 @@ async def set_app(update: Update, context: CallbackContext):
                                                         message_id=message.id,
                                                         reply_markup=InlineKeyboardMarkup(keyboard))
 
+            if "message_to_delete" in context.chat_data:
+                await delete_message(context=context, chat_id=update.effective_chat.id,
+                                     message_id=context.chat_data["message_to_delete"])
+                del context.chat_data["message_to_delete"]
+
             return CONFIRM_INTERVAL
 
     if update.callback_query and update.callback_query.data.startswith("interval_correct"):
@@ -687,33 +760,59 @@ async def set_app(update: Update, context: CallbackContext):
         return SEND_ON_CHECK
 
     if update.callback_query and update.callback_query.data.startswith("send_on_check"):
-        context.bot_data["apps"][str(len(context.bot_data["apps"]) + 1)] = {
-            "app_name": context.chat_data["setting_app"]["app_name"],
-            "app_link": context.chat_data["setting_app"]["app_link"],
-            "current_version": context.chat_data["setting_app"]["current_version"],
-            "last_update": context.chat_data["setting_app"]["last_update"],
-            "app_id": context.chat_data["setting_app"]["app_id"],
-            "last_check": None,
-            "last_check_time": None
-        }
+        if adding:
+            context.bot_data["apps"][str(len(context.bot_data["apps"]) + 1)] = {
+                "app_name": context.chat_data["setting_app"]["app_name"],
+                "app_link": context.chat_data["setting_app"]["app_link"],
+                "current_version": context.chat_data["setting_app"]["current_version"],
+                "last_update": context.chat_data["setting_app"]["last_update"],
+                "app_id": context.chat_data["setting_app"]["app_id"],
+                "last_check": None,
+                "last_check_time": None
+            }
 
-        context.bot_data["apps"][str(len(context.bot_data["apps"]))]["check_interval"] = (
-            context.chat_data["setting_app"]["check_interval"])
+            ap = context.bot_data["apps"][str(len(context.bot_data["apps"]))]
+        else:
+            ap = context.bot_data["apps"][context.chat_data["app_index_to_edit"]]
 
-        context.bot_data["apps"][str(len(context.bot_data["apps"]))]["next_check"] = (
-                datetime.now(pytz.timezone('Europe/Rome')) +
-                context.chat_data["setting_app"]["check_interval"]["timedelta"])
+        ap["check_interval"] = context.chat_data["setting_app"]["check_interval"]
 
-        context.bot_data["apps"][str(len(context.bot_data["apps"]))]["send_on_check"] = True \
-            if update.callback_query.data == "send_on_check_true" else False
+        ap["next_check"] = (datetime.now(pytz.timezone('Europe/Rome')) +
+                            context.chat_data["setting_app"]["check_interval"]["timedelta"])
 
-        del context.chat_data["setting_app"]
+        ap["send_on_check"] = True if update.callback_query.data == "send_on_check_true" else False
 
-        await schedule_job_and_send_settled_app_message(update, context)
+        if "setting_app" in context.chat_data:
+            del context.chat_data["setting_app"]
+
+    await schedule_job_and_send_settled_app_message(update, context)
+
+    return ConversationHandler.END
 
 
 async def edit_app(update: Update, context: CallbackContext):
     if update.callback_query and update.callback_query.data == "edit_app":
+        if "edit_message" in context.chat_data:
+            await delete_message(context=context, chat_id=update.effective_chat.id,
+                                 message_id=context.chat_data["edit_message"])
+            del context.chat_data["edit_message"]
+        if len(context.bot_data["apps"]) == 0:
+            text = ("✏ <b>Edit App</b>\n\n"
+                    "ℹ Non hai applicazioni nell'elenco. Per aggiungerla, premi il tasto sotto.\n\n"
+                    "🔸 Scegli un'opzione")
+            keyboard = [
+                [InlineKeyboardButton(text="➕ Aggiungi App", callback_data="add_app")],
+                [InlineKeyboardButton(text="🔙 Torna indietro", callback_data="back_to_main_settings")]
+            ]
+            await parse_conversation_message(context=context,
+                                             data={
+                                                 "chat_id": update.effective_chat.id,
+                                                 "text": text,
+                                                 "reply_markup": InlineKeyboardMarkup(keyboard),
+                                                 "message_id": update.effective_message.message_id
+                                             })
+            return ConversationHandler.END
+
         text = ("✏ <b>Edit App</b>\n\n"
                 "🗃 <b>Elenco Applicazioni</b>\n\n")
 
@@ -737,7 +836,7 @@ async def edit_app(update: Update, context: CallbackContext):
             "reply_markup": None
         })
 
-        context.chat_data["format_message"] = update.effective_message.message_id
+        context.chat_data["edit_message"] = update.effective_message.message_id
 
         return EDIT_SELECT_APP
 
@@ -757,7 +856,7 @@ async def edit_app(update: Update, context: CallbackContext):
         message = update.effective_message
 
         if not message.text.strip().isnumeric():
-            if message.text not in app_names:
+            if message.text.lower() not in app_names:
                 await context.bot.send_chat_action(chat_id=update.effective_chat.id, action=ChatAction.TYPING)
                 sleep(1)
                 message = await context.bot.send_message(chat_id=update.effective_chat.id,
@@ -785,7 +884,8 @@ async def edit_app(update: Update, context: CallbackContext):
                 context.chat_data["message_to_delete"] = message.id
                 return EDIT_SELECT_APP
 
-        if int(message.text.strip()) > len(app_names) or int(message.text.strip()) < 0:
+        if (message.text.strip().isnumeric() and
+                (int(message.text.strip()) > len(app_names) or int(message.text.strip()) < 0)):
             text = "🔴 <b>Invalid Index</b>\n\n🔸Fornisci un indice valido"
 
             await parse_conversation_message(context=context,
@@ -800,72 +900,74 @@ async def edit_app(update: Update, context: CallbackContext):
 
             return EDIT_SELECT_APP
 
-        context.chat_data["app_index_to_edit"] = str(message.text.strip())
-
-        for el in app_names:
-            if message.text == el:
-                context.chat_data["app_index_to_edit"] = str(app_names.index(el))
-                break
-
-        text = ("🔵 <b>App Found</b>\n\n"
-                "🔸<u>Intervallo di Controllo</u> – L'intervallo tra due aggiornamenti\n\n"
-                "❔ <b>Format</b>\nFornisci una stringa nel formato ↙\n\n"
-                "➡   <code>?m?d?h?min?s</code>\n\nsostituendo i <code>?</code> con i "
-                "valori corrispondenti di:\n\n"
-                "\t🔹 <code>m</code> – Mesi\n"
-                "\t🔹 <code>d</code> – Giorni\n"
-                "\t🔹 <code>h</code> – Ore\n"
-                "\t🔹 <code>min</code> – Minuti\n"
-                "\t🔹 <code>s</code> – Secondi\n\n"
-                "Inserisci tutti i valori corrispondenti anche se nulli.\n\n "
-                "<b>Esempio</b> 🔎 – <code>0m2d0h15min0s</code>\n\n"
-                "🔸Fornisci l'intervallo che desideri")
-
-        keyboard = [
-            [
-                InlineKeyboardButton(text="⚡️ Use Defaults", callback_data=f"set_default_values")
-            ],
-            [
-                InlineKeyboardButton(text="🔙 Torna Indietro", callback_data=f"back_to_main_settings")
-            ]
-        ]
-
-        await parse_conversation_message(context=context,
-                                         data={
-                                             "chat_id": update.effective_chat.id,
-                                             "text": text,
-                                             "message_id": -1,
-                                             "reply_markup": InlineKeyboardMarkup(keyboard),
-                                             "close_button": [2, 1]
-                                         })
-
         await schedule_messages_to_delete(context=context,
                                           messages={
-                                              str(update.effective_message.id): {
-                                                  "time": 2.5,
-                                                  "chat_id": update.effective_chat.id
+                                              update.effective_message.id: {
+                                                  "chat_id": update.effective_chat.id,
+                                                  "time": 2
                                               }
                                           })
 
-        return EDIT_INTERVAL
+        context.chat_data["app_index_to_edit"] = str(message.text.strip())
 
-    if update.callback_query and update.callback_query.data == "set_default_values":
-        index = context.chat_data["app_index_to_edit"]
-        context.bot_data["apps"][index]["check_interval"] = context.bot_data["settings"]["default_check_interval"]
-        context.bot_data["apps"][index]["send_on_check"] = context.bot_data["settings"]["default_send_on_check"]
+        for el in app_names:
+            if message.text.lower() == el:
+                context.chat_data["app_index_to_edit"] = str(app_names.index(el) + 1)
+                break
 
-        # return EDIT_APP_COMPLETE
-    ############################# FERMO QUI ###############################
-    if not update.callback_query:
-        try:
-            # noinspection DuplicatedCode
-            months = int(update.message.text.split('m')[0])
-            days = int(update.message.text.split('d')[0].split('m')[1])
-            hours = int(update.message.text.split('h')[0].split('d')[1])
-            minutes = int(update.message.text.split('min')[0].split('h')[1])
-            seconds = int(update.message.text.split('s')[0].split('min')[1])
-        except Exception:
-            pass
+        text = (f"🔵 <b>App Found</b>\n\n"
+                f"▶️ <code>"
+                f"{context.bot_data["apps"][str(context.chat_data["app_index_to_edit"])]["app_name"]}"
+                f"</code>\n\n"
+                f"🔸È l'applicazione che vuoi modificare?")
+
+        keyboard = [
+            [
+                InlineKeyboardButton(text="⚪️ Si", callback_data="confirm_app_to_edit"),
+                InlineKeyboardButton(text="⚫️ No", callback_data="edit_app")
+            ]
+        ]
+
+        await context.bot.send_chat_action(chat_id=update.effective_chat.id, action=ChatAction.TYPING)
+        sleep(1)
+        message = await context.bot.send_message(chat_id=update.effective_chat.id,
+                                                 text=text,
+                                                 reply_markup=InlineKeyboardMarkup(keyboard),
+                                                 parse_mode='HTML')
+
+
+        return EDIT_CONFIRM_APP
+
+
+async def see_app_settings(update: Update, context: CallbackContext):
+    if (index := update.callback_query.data.split(" ")[1]) in context.bot_data["apps"]:
+        ap = context.bot_data["apps"][index]
+
+        text = (f"🔍 <b>App Settings</b>\n\n"
+                f"  🔹App Name: <code>{ap["app_name"]}</code>\n"
+                f"  🔹Check Interval: "
+                f"<code>{ap["check_interval"]["input"]["months"]}m</code>"
+                f"<code>{ap["check_interval"]["input"]["days"]}d</code>"
+                f"<code>{ap["check_interval"]["input"]["hours"]}h</code>"
+                f"<code>{ap["check_interval"]["input"]["minutes"]}min</code>"
+                f"<code>{ap["check_interval"]["input"]["seconds"]}s</code>\n"
+                f"  🔹Send On Check: <code>{ap["send_on_check"]}</code>\n\n"
+                f"🔸 Scegli un'opzione")
+
+        message = await context.bot.send_message(chat_id=update.effective_chat.id,
+                                                 text=text,
+                                                 parse_mode='HTML')
+
+        keyboard = [
+            [
+                InlineKeyboardButton(text="✏ Modifica", callback_data=f"edit_app_from_check {index}"),
+                InlineKeyboardButton(text="🗑 Chiudi", callback_data=f"delete_check_message {message.id}")
+            ]
+        ]
+
+        await context.bot.edit_message_reply_markup(chat_id=update.effective_chat.id,
+                                                    message_id=message.id,
+                                                    reply_markup=InlineKeyboardMarkup(keyboard))
 
 
 async def parse_conversation_message(context: CallbackContext, data: dict):
@@ -916,28 +1018,46 @@ async def parse_conversation_message(context: CallbackContext, data: dict):
 
 
 async def schedule_job_and_send_settled_app_message(update: Update, context: CallbackContext):
+    added = True if "editing" not in context.chat_data else False
+
+    if added:
+        ap = context.bot_data["apps"][str(len(context.bot_data["apps"]))]
+    else:
+        index = context.chat_data["app_index_to_edit"]
+        ap = context.bot_data["apps"][index]
+        del context.chat_data["app_index_to_edit"]
+        del context.chat_data["editing"]
+
+    ap["next_check"] = {}
+    ap["next_check"] = datetime.now(pytz.timezone('Europe/Rome')) + ap["check_interval"]["timedelta"]
+
     text = (f"☑️ <b>App Settled Successfully</b>\n\n"
             f"🔹<u>Check Interval</u> ➡ "
             f"<code>"
-            f"{context.bot_data["apps"][str(len(context.bot_data["apps"]))]["check_interval"]["input"]["months"]}m"
-            f"{context.bot_data["apps"][str(len(context.bot_data["apps"]))]["check_interval"]["input"]["days"]}d"
-            f"{context.bot_data["apps"][str(len(context.bot_data["apps"]))]["check_interval"]["input"]["hours"]}h"
-            f"{context.bot_data["apps"][str(len(context.bot_data["apps"]))]["check_interval"]["input"]["minutes"]}"
+            f"{ap["check_interval"]["input"]["months"]}m"
+            f"{ap["check_interval"]["input"]["days"]}d"
+            f"{ap["check_interval"]["input"]["hours"]}h"
+            f"{ap["check_interval"]["input"]["minutes"]}"
             f"min"
-            f"{context.bot_data["apps"][str(len(context.bot_data["apps"]))]["check_interval"]["input"]["seconds"]}s"
+            f"{ap["check_interval"]["input"]["seconds"]}s"
             f"</code>\n"
             f"🔹<u>Send On Check</u> ➡ "
-            f"<code>{str(context.bot_data["apps"][str(len(context.bot_data["apps"]))]["send_on_check"])}</code>"
+            f"<code>{ap["send_on_check"]}</code>\n\n"
+            f"🔸 <u>Next Check</u> ➡ <code>{ap["next_check"].strftime('%d %B %Y – %H:%M:%S')}</code>"
             f"\n\n")
 
     await context.bot.send_chat_action(chat_id=update.effective_chat.id,
                                        action=ChatAction.TYPING)
 
+    if added:
+        button = InlineKeyboardButton(text="➕ Aggiungi Altra App", callback_data="add_app")
+    else:
+        button = InlineKeyboardButton(text="✏ Modifica Altra App", callback_data="edit_app")
+
     keyboard = [
         [
-            InlineKeyboardButton(text="➕ Aggiungi Altra App", callback_data="add_app"),
-            InlineKeyboardButton(text="🔙 Torna Indietro",
-                                 callback_data="back_to_main_settings")
+            button,
+            InlineKeyboardButton(text="🔙 Torna Indietro", callback_data="back_to_main_settings")
         ]
     ]
 
@@ -950,20 +1070,22 @@ async def schedule_job_and_send_settled_app_message(update: Update, context: Cal
                                },
                                when=1.5)
 
-    context.bot_data["apps"][str(len(context.bot_data["apps"]))]["next_check"] = {}
-    timed = context.bot_data["apps"][str(len(context.bot_data["apps"]))]["check_interval"]["timedelta"]
-    context.bot_data["apps"][str(len(context.bot_data["apps"]))]["next_check"] = (
-            datetime.now(pytz.timezone('Europe/Rome')) + timed)
+    if not added:
+        jobs = context.job_queue.get_jobs_by_name(ap["app_name"])
+        if len(jobs) > 0:
+            for job in jobs:
+                job.schedule_removal()
 
+    # noinspection PyUnboundLocalVariable
     context.job_queue.run_repeating(
         callback=job_queue.scheduled_app_check,
-        interval=context.bot_data["apps"][str(len(context.bot_data["apps"]))]["check_interval"]["timedelta"],
+        interval=ap["check_interval"]["timedelta"],
         chat_id=update.effective_chat.id,
-        name=context.bot_data["apps"][str(len(context.bot_data["apps"]))]["app_name"],
+        name=ap["app_name"],
         data={
-            "app_link": context.bot_data["apps"][str(len(context.bot_data["apps"]))]["app_link"],
-            "app_id": context.bot_data["apps"][str(len(context.bot_data["apps"]))]["app_id"],
-            "app_index": str(len(context.bot_data["apps"]))
+            "app_link": ap["app_link"],
+            "app_id": ap["app_id"],
+            "app_index": str(len(context.bot_data["apps"])) if added else index
         }
     )
 
@@ -1030,6 +1152,6 @@ def create_edit_app_list(bot_data: dict) -> list:
     app_names = []
     if "apps" in bot_data:
         for a in bot_data["apps"]:
-            app_names.append(''.join(filter(whitelist.__contains__, str(bot_data["apps"][a]["app_name"]))))
+            app_names.append(''.join(filter(whitelist.__contains__, str(bot_data["apps"][a]["app_name"]).lower())))
 
     return app_names or []

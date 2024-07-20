@@ -155,42 +155,48 @@ async def scheduled_app_check(context: ContextTypes.DEFAULT_TYPE):
         job_queue_logger.error(f"App '{context.job.data["app_id"]}' not found: {e}")
     else:
         index = context.job.data["app_index"]
-        context.bot_data["apps"][index]["last_check"] = datetime.datetime.now(pytz.timezone('Europe/Rome'))
-        context.bot_data["apps"][index]["next_check"] = (datetime.datetime.now(pytz.timezone('Europe/Rome')) +
-                                                         context.bot_data["apps"][index]["check_interval"]["timedelta"])
+        ap = context.bot_data["apps"][index]
+        ap["last_check"] = datetime.datetime.now(pytz.timezone('Europe/Rome'))
+        ap["next_check"] = datetime.datetime.now(pytz.timezone('Europe/Rome')) + ap["check_interval"]["timedelta"]
         new_version = app_details.get("version")
         update_date = app_details.get("lastUpdatedOn")
 
-        check = (new_version != context.bot_data["apps"][index]["current_version"] or
-                 update_date != context.bot_data["apps"][index]["last_update"])
+        if isinstance(ap["last_update"], datetime.datetime):
+            check = (new_version != ap["current_version"] or
+                     update_date != ap["last_update"].strftime("%b %d, %Y"))
+        else:
+            check = (new_version != ap["current_version"] or
+                     update_date != ap["last_update"])
 
         text = None
 
         if check:
             text = (f"🚨 <b>New Update Found</b>\n\n"
-                    f"   🔹App Name: <code>{context.bot_data["apps"][index]["app_name"]}</code>\n"
-                    f"   🔹Registered Version: <code>{context.bot_data["apps"][index]["current_version"]}</code>\n"
+                    f"   🔹App Name: <code>{ap["app_name"]}</code>\n"
+                    f"   🔹Registered Version: <code>{ap["current_version"]}</code>\n"
                     f"   🔹New Version: {new_version}\n"
-                    f"   🔹Updated On: <code>{context.bot_data["apps"][index]["last_update"]}</code>\n\n"
+                    f"   🔹Updated On: <code>{ap["last_update"]}</code>\n\n"
                     f"🔸Scegli un'opzione") if new_version != 'Varies with device' else (
                 f"🚨 <b>New Update Found</b>\n\n"
-                f"   🔹App Name: <code>{context.bot_data["apps"][index]["app_name"]}</code>\n"
-                f"   🔹Registered Version: ⚠️ <code>{context.bot_data["apps"][index]["current_version"]}</code>\n"
+                f"   🔹App Name: <code>{ap["app_name"]}</code>\n"
+                f"   🔹Registered Version: ⚠️ <code>{ap["current_version"]}</code>\n"
                 f"   🔹New Version: {new_version}\n"
-                f"   🔹Updated On: <code>{context.bot_data["apps"][index]["last_update"]}</code>\n\n"
-                f"🗒 Siccome la versione cambia a seconda del dispositivo, potrebbe essere che l'aggiornamento non"
-                f" riguardi il client di interesse.\n\n"
+                f"   🔹Updated On: <code>{ap["last_update"]}</code>\n\n"
+                f"   ▪️Next Check: <code>{ap["next_check"].strftime('%d %B %Y – %H:%M:%S')}</code>\n\n"
+                f"ℹ Potrebbe essere che l'aggiornamento non riguardi il client di interesse perché la versione"
+                f" dipende dal dispositivo.\n\n"
                 f"🔸Scegli un'opzione"
             )
 
-            context.bot_data["apps"][index]["current_version"] = new_version
-            context.bot_data["apps"][index]["last_update"] = update_date
+            ap["current_version"] = new_version
+            ap["last_update"] = update_date
 
-        elif context.bot_data["apps"][index]["send_on_check"]:
+        elif ap["send_on_check"]:
             text = (f"👁‍🗨 <b>Check Performed</b> – No Updates Found\n\n"
-                    f"   🔹App Name: <code>{context.bot_data["apps"][index]["app_name"]}</code>\n"
-                    f"   🔹Registered Version: <code>{context.bot_data["apps"][index]["current_version"]}</code>\n"
-                    f"   🔹Updated On: <code>{update_date}</code>\n\n"
+                    f"   🔹App Name: <code>{ap["app_name"]}</code>\n"
+                    f"   🔹Registered Version: <code>{ap["current_version"]}</code>\n"
+                    f"   🔹Updated On: <code>{update_date}</code>\n"
+                    f"   ▪️Next Check: <code>{ap["next_check"].strftime('%d %B %Y – %H:%M:%S')}</code>\n\n"
                     f"🔸Scegli un'opzione")
 
         if text:
@@ -202,8 +208,8 @@ async def scheduled_app_check(context: ContextTypes.DEFAULT_TYPE):
 
             keyboard = [
                 [
-                    InlineKeyboardButton(text="🪛 Imp. App", callback_data=f"edit_app_from_job {index}"),
-                    InlineKeyboardButton(text="🌐 Vai al Play Store", url=context.bot_data["apps"][index]["app_link"])
+                    InlineKeyboardButton(text="🪛 Imp. App", callback_data=f"edit_from_job {index}"),
+                    InlineKeyboardButton(text="🌐 Vai al Play Store", url=ap["app_link"])
                 ],
                 [InlineKeyboardButton(text="🗑 Cancella Messaggio", callback_data=f"delete_check_message {message.id}")]
             ]

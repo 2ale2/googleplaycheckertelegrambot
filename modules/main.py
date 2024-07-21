@@ -68,7 +68,16 @@ async def set_data(app: Application):
                 ...
             },
         "settings": {
-                "default_check_interval": intervallo di default tra 2 check,
+                "default_check_interval": {
+                        "input": {
+                                "months": mesi
+                                "days": giorni
+                                "hours": ore
+                                "minutes": minuti
+                                "seconds": secondi
+                            },
+                        "timedelta": timedelta dell'input
+                    },
                 "default_send_on_check": manda un messaggio anche se non è stato trovato un nuovo aggiornamento default
                 "tutorial": primo avvio
             },
@@ -182,28 +191,37 @@ async def tutorial(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.bot_data["settings"]["tutorial"] = True
     if update.callback_query.data.startswith("print_tutorial"):
         text = ("💡 <b>Informazioni Generali</b>\n\n"
+                "Sono in grado di controllare periodicamente la presenza di aggiornamenti relativi ad applicazioni sul "
+                "Play Store. Per funzionare, ho bisogno di tre informazioni:\n"
+                "  1. il <u>link all'applicazione</u> che ti interessa;\n"
+                "  2. l'<u>intervallo di controllo</u> tra due check;\n"
+                "  3. in quali <u>condizioni</u> vuoi ricevere il messaggio.\n\n"
+                "ℹ <b>Verrai guidato in ogni passaggio.</b> In caso di problemi, contatta @AleLntr."
                 "1️⃣ <b>Al Primo Avvio</b>\n"
-                "Vengono settate tutte le variabili permanenti, utili al funzionamento del bot (impostazioni e valori"
-                " di default). Da ora, <b>tutti</b> i dati verranno salvati all'interno di queste variabili permanenti "
-                "e i valori contenuti all'interno saranno salvati, ad intervalli regolari, all'interno di un file "
-                "chiamato <code>persistence</code> (è un file senza estensione contenente caratteri non leggibili)."
-                "\n\n⚠️ Il salvataggio di tali informazioni sul file <code>persistence</code> serve per garantire che "
+                "Vengono settate le impostazioni di default, utili al mio funzionamento. Da ora, <b>tutti</b> i dati "
+                "verranno salvati all'interno di alcune variabili permanenti."
+                "I valori contenuti all'interno di queste variabili saranno salvati, ad intervalli regolari, "
+                "all'interno di un file chiamato <code>persistence</code> (è un file senza estensione contenente "
+                "caratteri non leggibili).\n\n"
+                "⚠️ Il salvataggio di tali informazioni sul file <code>persistence</code> serve per garantire che "
                 "i dati non vengano persi in caso di arresti anomali dello script del bot. <u>La rimozione di tale "
-                "file, pertanto, comporta la cancellazione della sua memoria</u>.\n\n"
-                "Al primo avvio, ti verrà poi richiesto di impostare alcuni valori di default: l'<b>intervallo di check"
-                " di default</b> – se non viene impostato per una certa applicazione – e il <b>parametro sulla "
+                "file, pertanto, comporta la cancellazione della sua memoria</u> e, in tal caso, il bot dovrà "
+                "essere reimpostato, come ti attingi a fare.\n\n"
+                "I valori che stai per impostare costituiscono le <b>impostazioni di default</b>: l'<b>intervallo di "
+                "check di default</b> – se non viene impostato per una certa applicazione – e il <b>parametro sulla "
                 "condizione di invio del messaggio</b>, di default, che specifica se il messaggio andrà mandato solo"
                 " se viene rilevato un aggiornamento oppure ad ogni controllo.\n\n"
                 "2️⃣ <b>Impostazioni</b> – Il bot consente alcune semplici operazioni, tra cui:"
-                "\n\n🔸 <b>Aggiunta di applicazioni da monitorare</b>\n L'aggiunta di un'applicazione può essere fatta "
-                "tramite ricerca per nome o tramite il passaggio del link al Play Store."
-                "\n\n🔸 <b>Settaggio delle applicazioni</b>\nQuando un'applicazione viene aggiunta, è richiesta "
-                "l'impostazione di alcuni parametri, tra cui l'intervallo di check degli aggiornamenti e se il"
-                " messaggio andrà mandato solo quando si trova un aggiornamento, oppure ad ogni controllo."
-                "\n\n🔸 <b>Modifica delle impostazioni di app già aggiunte</b>\nDa un apposito menu, sarà possibile "
+                "\n\n🔸 <b>Aggiunta di applicazioni da monitorare</b>\n  L'aggiunta di un'applicazione può essere fatta"
+                " tramite il passaggio del link al Play Store."
+                "\n\n🔸 <b>Settaggio delle applicazioni</b>\n  Quando un'applicazione viene aggiunta, è richiesta "
+                "l'impostazione di controllo."
+                "\n\n🔸 <b>Modifica delle impostazioni di app già aggiunte</b>\n  Da un apposito menu, sarà possibile "
                 "cambiare le impostazioni relative ad un'applicazione precedentemente aggiunta."
-                "\n\n🔸 <b>Sospensione o rimozione di un'applicazione</b>\nPotrai anche sospendere gli aggiornamenti e "
-                "riattivarli in un secondo momento, o rimuovere un'applicazione dall'elenco di quelle tracciate.\n\n"
+                "\n\n🔸 <b>Sospensione o rimozione di un'applicazione</b>\n  Potrai anche sospendere gli aggiornamenti"
+                " e riattivarli in un secondo momento, o rimuovere un'applicazione dall'elenco di quelle tracciate."
+                "\n\n🔸 <b>Modifica delle impostazioni di Default</b>\n  Tutti i valori possono essere cambiati tramite "
+                "le impostazioni.\n\n"
                 "➡ <b>Nota Importante</b> – Per consentire al bot di inviarti messaggi, ricordati di mantenere la chat "
                 "attiva mantenendovi almeno un messaggio all'interno, altrimenti il bot non ti potrà scrivere.")
         keyboard = [
@@ -266,7 +284,7 @@ async def send_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def catch_update(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.callback_query and ("edit_from_job" in update.callback_query.data):
+    if update.callback_query and ("settings" in update.callback_query.data):
         print(update.callback_query.data)
         for h in context.application.handlers:
             for j in context.application.handlers[h]:
@@ -341,7 +359,8 @@ def main():
         states={
             0: [
                 CallbackQueryHandler(pattern="^print_tutorial.+$", callback=tutorial),
-                CallbackQueryHandler(pattern="^set_defaults.+$", callback=settings.set_defaults)
+                CallbackQueryHandler(pattern="^set_defaults.+$", callback=settings.set_defaults),
+                CallbackQueryHandler(pattern="^confirm_edit_default_settings.+$", callback=settings.set_defaults)
             ],
             1: [
                 CallbackQueryHandler(pattern="^set_defaults.+$", callback=settings.set_defaults)
@@ -356,7 +375,7 @@ def main():
                 CallbackQueryHandler(pattern="^default_send_on_check_false.+$", callback=settings.set_defaults)
             ]
         },
-        fallbacks=[],
+        fallbacks=[CallbackQueryHandler(pattern="cancel_edit_settings", callback=settings.change_settings)],
         name="default_settings_conv_handler"
     )
 
@@ -415,7 +434,7 @@ def main():
                 set_app_conv_handler
             ]
         },
-        fallbacks=[CallbackQueryHandler(pattern="^back_to_main_settings.+$", callback=settings.menage_apps)],
+        fallbacks=[CallbackQueryHandler(pattern="back_to_main_settings", callback=settings.menage_apps)],
         allow_reentry=True
     )
 
@@ -433,6 +452,14 @@ def main():
         fallbacks=[CallbackQueryHandler(pattern="confirm_remove", callback=settings.remove_app)]
     )
 
+    suspend_app_conv_handler = ConversationHandler(
+        entry_points=[
+            CallbackQueryHandler(pattern="^suspend_app.+$", callback=settings.suspend_app)
+        ],
+        states={},
+        fallbacks=[]
+    )
+
     conv_handler2 = ConversationHandler(
         entry_points=[
             CallbackQueryHandler(pattern="settings", callback=settings.change_settings),
@@ -440,7 +467,6 @@ def main():
         ],
         states={
             CHANGE_SETTINGS: [
-                CallbackQueryHandler(pattern="settings", callback=settings.change_settings),
                 CallbackQueryHandler(pattern="menage_apps", callback=settings.menage_apps),
                 conv_handler1,
                 CallbackQueryHandler(pattern="back_to_main_menu", callback=send_menu)
@@ -448,13 +474,12 @@ def main():
             MENAGE_APPS: [
                 add_app_conv_handler,
                 edit_app_conv_handler,
+                delete_app_conv_handler,
+                CallbackQueryHandler(pattern="list_app", callback=settings.list_apps),
                 CallbackQueryHandler(pattern="back_to_main_settings", callback=settings.menage_apps),
                 CallbackQueryHandler(pattern="settings", callback=settings.change_settings)
             ],
             LIST_APPS: [
-                CallbackQueryHandler(pattern="remove_app", callback=settings.menage_apps),
-                CallbackQueryHandler(pattern="edit_app", callback=settings.menage_apps),
-                CallbackQueryHandler(pattern="info_app", callback=settings.menage_apps),
                 CallbackQueryHandler(pattern="^back_to_main_settings.+$", callback=settings.menage_apps)
             ],
             LIST_LAST_CHECKS: []
@@ -463,7 +488,7 @@ def main():
         allow_reentry=True
     )
 
-    app.add_handler(TypeHandler(Update, callback=catch_update), group=-1)
+    # app.add_handler(TypeHandler(Update, callback=catch_update), group=-1)
 
     app.add_handler(conv_handler1)
     app.add_handler(conv_handler2)

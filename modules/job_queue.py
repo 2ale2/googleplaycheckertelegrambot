@@ -211,7 +211,13 @@ async def scheduled_app_check(context: ContextTypes.DEFAULT_TYPE):
                     InlineKeyboardButton(text="🪛 Imp. App", callback_data=f"edit_from_job {index}"),
                     InlineKeyboardButton(text="🌐 Vai al Play Store", url=ap["app_link"])
                 ],
-                [InlineKeyboardButton(text="🗑 Cancella Messaggio", callback_data=f"delete_check_message {message.id}")]
+                [
+                    InlineKeyboardButton(text="⏸ Sospendi Controlli", callback_data=f"suspend_app {index}")
+                ],
+                [
+                    InlineKeyboardButton(text="🗑 Cancella Messaggio",
+                                         callback_data=f"delete_check_message {message.id}")
+                ]
             ]
 
             await context.bot.edit_message_reply_markup(chat_id=os.getenv("MY_ID"),

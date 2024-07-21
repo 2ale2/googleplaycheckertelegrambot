@@ -25,6 +25,8 @@ file_handler = handlers.RotatingFileHandler(filename="../misc/logs/settings.log"
 file_handler.setFormatter(formatter)
 settings_logger.addHandler(file_handler)
 
+bot_logger = logging.getLogger("bot_logger")
+
 CHANGE_SETTINGS, MENAGE_APPS, LIST_LAST_CHECKS, MENAGE_APPS_OPTIONS, LIST_APPS, ADD_APP = range(6)
 
 SEND_LINK, CONFIRM_APP_NAME = range(2)
@@ -38,12 +40,50 @@ DELETE_APP_SELECT, DELETE_APP_CONFIRM = range(2)
 
 @send_action(ChatAction.TYPING)
 async def set_defaults(update: Update, context: CallbackContext):
+    if update.callback_query and update.callback_query.data == "edit_default_settings":
+        await delete_message(context=context, chat_id=update.effective_chat.id,
+                             message_id=update.effective_message.message_id)
+        inp = context.bot_data["settings"]["default_check_interval"]["input"]
+        text = (f"🔧 <b>Impostazioni di Default</b>\n\n"
+                f"  🔹 <u>Default Interval</u> "
+                f"<code>{inp["months"]}m{inp["days"]}d{inp["hours"]}h{inp["minutes"]}min{inp["seconds"]}s</code>\n"
+                f"  🔹 <u>Default Send On Check</u> "
+                f"<code>{context.bot_data["settings"]["default_send_on_check"]}</code>\n\n"
+                f"🔸 Scegli un'opzione")
+
+        sleep(1)
+
+        message_id = await parse_conversation_message(context=context, data={
+            "chat_id": update.effective_chat.id,
+            "text": text,
+            "message_id": update.effective_message.message_id,
+            "reply_markup": False
+        })
+
+        keyboard = [
+            [
+                InlineKeyboardButton(text="✏ Modifica", callback_data=f"confirm_edit_default_settings {message_id}"),
+                InlineKeyboardButton(text="🔙 Torna Indietro", callback_data="cancel_edit_settings")
+            ]
+        ]
+
+        await context.bot.edit_message_reply_markup(chat_id=update.effective_chat.id,
+                                                    message_id=message_id,
+                                                    reply_markup=InlineKeyboardMarkup(keyboard))
+
+        return 0
+
     if update.callback_query and (update.callback_query.data.startswith("set_defaults") or
                                   update.callback_query.data.startswith("interval_incorrect") or
-                                  update.callback_query.data == "edit_default_settings"):
-        if update.callback_query.data == "edit_default_settings":
+                                  update.callback_query.data.startswith("confirm_edit_default_settings")):
+
+        bot_logger.info("Starting to set default settings.")
+
+        if "message_to_delete" in context.chat_data:
             await delete_message(context=context, chat_id=update.effective_chat.id,
-                                 message_id=update.effective_message.message_id)
+                                 message_id=context.chat_data["message_to_delete"])
+            del context.chat_data["message_to_delete"]
+
         if len(li := update.callback_query.data.split(" ")) > 1:
             await delete_message(context=context, message_id=int(li[1]), chat_id=update.effective_chat.id)
 
@@ -114,6 +154,7 @@ async def set_defaults(update: Update, context: CallbackContext):
                 "minutes": minutes,
                 "hours": hours
             }
+
             # noinspection DuplicatedCode
             text = (f"❓ Conferma se l'intervallo indicato è corretto.\n\n"
                     f"▫️️ <code>{months}</code> mesi\n"
@@ -138,6 +179,10 @@ async def set_defaults(update: Update, context: CallbackContext):
             return 2
 
     if update.callback_query and update.callback_query.data.startswith("interval_correct"):
+        i = context.bot_data["settings"]["default_check_interval"]["input"]
+        bot_logger.info(f"Default Interval -> Setting Completed: "
+                        f"{i["months"]}m{i["days"]}d{i["months"]}h{i["months"]}min{i["months"]}s")
+
         if len(li := update.callback_query.data.split(" ")) > 1:
             await delete_message(context=context, chat_id=update.effective_chat.id,
                                  message_id=int(li[1]))
@@ -165,6 +210,7 @@ async def set_defaults(update: Update, context: CallbackContext):
         return 3
 
     if update.callback_query and update.callback_query.data.startswith("default_send_on_check"):
+        i = context.bot_data["settings"]["default_check_interval"]["input"]
         if len(li := update.callback_query.data.split(" ")) > 1:
             await delete_message(context=context, chat_id=update.effective_chat.id,
                                  message_id=int(li[1]))
@@ -174,15 +220,18 @@ async def set_defaults(update: Update, context: CallbackContext):
         else:
             context.bot_data["settings"]["default_send_on_check"] = False
 
-        interval_input = context.bot_data["settings"]["default_check_interval"]["input"]
+        bot_logger.info(f"Default Send On Check -> Setting Completed: "
+                        f"{context.bot_data["settings"]["default_send_on_check"]}")
+
+        bot_logger.info(f"Default Setting Completed.")
 
         text = (f"☑️ <b>Setting Completed</b>\n\n"
                 f"🔸 <u>Default Interval</u> – "
-                f"<code>{interval_input["months"]}m"
-                f"{interval_input["days"]}d"
-                f"{interval_input["hours"]}h"
-                f"{interval_input["minutes"]}min"
-                f"{interval_input["seconds"]}s</code>\n"
+                f"<code>{i["months"]}m"
+                f"{i["days"]}d"
+                f"{i["hours"]}h"
+                f"{i["minutes"]}min"
+                f"{i["seconds"]}s</code>\n"
                 f"🔸 <u>Default Send On Check</u> – "
                 f"<code>{str(context.bot_data["settings"]["default_send_on_check"])}"
                 f"</code>\n\n"
@@ -222,7 +271,7 @@ async def change_settings(update: Update, context: CallbackContext):
                                          "reply_markup": InlineKeyboardMarkup(keyboard)}
                                      )
 
-    return CHANGE_SETTINGS
+    return CHANGE_SETTINGS if update.callback_query.data != "cancel_edit_settings" else ConversationHandler.END
 
 
 async def menage_apps(update: Update, context: CallbackContext):
@@ -254,9 +303,10 @@ async def menage_apps(update: Update, context: CallbackContext):
                 [
                     InlineKeyboardButton(text="✏️ Modifica", callback_data="edit_app"),
                     InlineKeyboardButton(text="➕ Aggiungi", callback_data="add_app"),
-                    InlineKeyboardButton(text="➖ Rimuovi", callback_data="remove_app")
+                    InlineKeyboardButton(text="➖ Rimuovi", callback_data="delete_app")
                 ],
                 [
+                    InlineKeyboardButton(text="⏸ Sospendi App", callback_data="suspend_app"),
                     InlineKeyboardButton(text="📄 Lista App", callback_data="list_apps")
                 ],
                 [
@@ -342,16 +392,60 @@ async def close_menu(update: Update, context: CallbackContext):
     return ConversationHandler.END
 
 
+@send_action(action=ChatAction.TYPING)
+async def list_apps(update: Update, context: CallbackContext):
+    await delete_message(context=context, chat_id=update.effective_chat.id, message_id=update.effective_message.id)
+
+    text = "🗃 <b>App List</b>\n\n"
+
+    if len(context.bot_data["apps"]) == 0:
+        text += ("ℹ Nessuna app aggiunta.\n\n"
+                 "🔸 Scegli un'opzione")
+
+    else:
+        for a in context.bot_data["apps"]:
+            ap = context.bot_data["apps"][a]
+            text += (f"  {a}. {ap["app_name"]}\n"
+                     f"    App ID: <code>{ap["app_id"]}</code>\n"
+                     f"    App Link: <a href=\"{ap["app_link"]}\">link 🔗</a>\n"
+                     f"    Current Version: <code>{ap["current_version"]}</code>\n"
+                     f"    Last Update: <code>{ap["last_update"]}</code>\n\n"
+                     f"    Check Interval: <code>"
+                     f"{ap["check_interval"]["input"]["months"]}m"
+                     f"{ap["check_interval"]["input"]["days"]}d"
+                     f"{ap["check_interval"]["input"]["hours"]}h"
+                     f"{ap["check_interval"]["input"]["minutes"]}min"
+                     f"{ap["check_interval"]["input"]["seconds"]}s</code>\n"
+                     f"    Send On Check: <code>{ap["send_on_check"]}</code>\n\n")
+            
+            text += (f"    Last Check: <code>None</code>" 
+                     if ap["last_check"] is None 
+                     else f"    Last Check: <code>{ap["last_check"].strptime('%d %B %Y – %H:%M:%S')}</code>\n")
+            
+            text += (f"    Next Check: <code>{ap["next_check"].strptime('%d %B %Y – %H:%M:%S')}</code>\n\n"
+                     f"    <b>Suspended</b>: <code>{ap["suspended"]}</code>\n\n")
+
+    sleep(1)
+    await parse_conversation_message(context=context, data={
+        "chat_id": update.effective_chat.id,
+        "text": text,
+        "message_id": -1,
+        "reply_markup": None
+    })
+
+    return LIST_APPS
+
+
 async def add_app(update: Update, context: CallbackContext):
     if update.callback_query and update.callback_query.data == "add_app":
-        text = "➕ <b>Aggiungi App</b>\n\n"
+        text = "➕ <b>Add App</b>\n\n"
 
         if len(context.bot_data["apps"]) != 0:
             text += "🗃 <u>Elenco</u>\n\n"
             for ap in context.bot_data["apps"]:
                 text += f"  {ap}. {context.bot_data['apps'][str(ap)]["app_name"]}\n"
 
-        text += "\n🔸Manda il link all'applicazione su Google Play"
+        text += "\n🔸 Manda il link all'applicazione su Google Play"
 
         context.chat_data["send_link_message"] = update.effective_message.id
 
@@ -383,7 +477,7 @@ async def add_app(update: Update, context: CallbackContext):
                 text = (f"❌ A causa di un problema di rete, non riuscito a reperire il link che hai mandato.\n\n"
                         f"🔍 <i>Reason</i>\n{res.reason}\n\n"
                         f"🆘 Se il problema persiste, contatta @AleLntr\n\n"
-                        f"🔸Puoi riprovare a mandare lo stesso link o cambiarlo")
+                        f"🔸 Puoi riprovare a mandare lo stesso link o cambiarlo")
 
                 await parse_conversation_message(context=context,
                                                  data={
@@ -401,19 +495,19 @@ async def add_app(update: Update, context: CallbackContext):
                 if isinstance(app_details, NotFoundError):
                     text = ("⚠️ Ho avuto problemi a reperire l'applicazione.\n\n"
                             "Potrebbe essere un problema di API o l'applicazione potrebbe essere stata rimossa.\n\n"
-                            "🔸Contatta @AleLntr per risolvere il problema, o manda un altro link")
+                            "🔸 Contatta @AleLntr per risolvere il problema, o manda un altro link")
                 else:
                     text = "❌ Sembra che il link non sia corretto (manca l'ID del pacchetto)"
 
-                message = await parse_conversation_message(context=context,
-                                                           data={
-                                                               "chat_id": update.effective_chat.id,
-                                                               "message_id": -1,
-                                                               "text": text,
-                                                               "reply_markup": None
-                                                           })
+                message_id = await parse_conversation_message(context=context,
+                                                              data={
+                                                                  "chat_id": update.effective_chat.id,
+                                                                  "message_id": -1,
+                                                                  "text": text,
+                                                                  "reply_markup": None
+                                                              })
 
-                context.chat_data["message_to_delete"] = message.id
+                context.chat_data["message_to_delete"] = message_id
 
                 await schedule_messages_to_delete(context=context,
                                                   messages={
@@ -457,18 +551,18 @@ async def add_app(update: Update, context: CallbackContext):
                 text = f"❔ Il nome dell'applicazione è <b>{name}</b>?" \
                     if name else (f"⚠️ Il nome dell'applicazione è <code>None</code>. È possibile che ci sia "
                                   f"un problema di API o di struttura della pagina web.\n\n"
-                                  f"🔸Contatta @AleLntr per risolvere il problema, oppure <u>invia un altro link</u>")
+                                  f"🔸 Contatta @AleLntr per risolvere il problema, oppure <u>invia un altro link</u>")
 
-                message = await parse_conversation_message(context=context,
-                                                           data={
-                                                               "chat_id": update.effective_chat.id,
-                                                               "message_id": -1,
-                                                               "text": text,
-                                                               "reply_markup": InlineKeyboardMarkup(
-                                                                   keyboard) if keyboard else None
-                                                           })
+                message_id = await parse_conversation_message(context=context,
+                                                              data={
+                                                                  "chat_id": update.effective_chat.id,
+                                                                  "message_id": -1,
+                                                                  "text": text,
+                                                                  "reply_markup": InlineKeyboardMarkup(
+                                                                      keyboard) if keyboard else None
+                                                              })
 
-                context.chat_data["message_to_delete"] = message.id
+                context.chat_data["message_to_delete"] = message_id
 
                 await schedule_messages_to_delete(context=context,
                                                   messages={
@@ -496,7 +590,7 @@ async def add_app(update: Update, context: CallbackContext):
 
             text = "❌ Non hai mandato un link valido o hai mandato più di un link nello stesso messaggio."
 
-            message = await parse_conversation_message(context=context, data={
+            message_id = await parse_conversation_message(context=context, data={
                 "chat_id": update.effective_chat.id,
                 "message_id": -1,
                 "text": text,
@@ -511,7 +605,7 @@ async def add_app(update: Update, context: CallbackContext):
                                                   }
                                               })
 
-            context.chat_data["send_link_message"] = message.id
+            context.chat_data["send_link_message"] = message_id
 
             return SEND_LINK
 
@@ -526,7 +620,7 @@ async def add_app(update: Update, context: CallbackContext):
             del context.chat_data["send_link_message"]
 
         text = ("⚠️ Se il nome non è corretto, è possibile che ci sia un problema con l'API di Google Play.\n\n"
-                "🔸Contatta @AleLntr o <u>invia un altro link</u>.")
+                "🔸 Contatta @AleLntr o <u>invia un altro link</u>.")
 
         keyboard = [
             [
@@ -590,7 +684,7 @@ async def set_app(update: Update, context: CallbackContext):
 
         # inizio procedura di settaggio
         text = ("🪛 <b>App Set Up</b>\n\n"
-                "🔸<u>Intervallo di Controllo</u> – L'intervallo tra due aggiornamenti\n\n"
+                "🔸 <u>Intervallo di Controllo</u> – L'intervallo tra due aggiornamenti\n\n"
                 "❔ <b>Format</b>\nFornisci una stringa nel formato ↙\n\n"
                 "➡   <code>?m?d?h?min?s</code>\n\nsostituendo i <code>?</code> con i "
                 "valori corrispondenti di:\n\n"
@@ -601,7 +695,7 @@ async def set_app(update: Update, context: CallbackContext):
                 "\t🔹 <code>s</code> – Secondi\n\n"
                 "Inserisci tutti i valori corrispondenti anche se nulli.\n\n "
                 "<b>Esempio</b> 🔎 – <code>0m2d0h15min0s</code>\n\n"
-                "🔸Fornisci l'intervallo che desideri")
+                "🔸 Fornisci l'intervallo che desideri")
 
         context.chat_data["message_to_delete"] = update.effective_message.id
 
@@ -613,15 +707,15 @@ async def set_app(update: Update, context: CallbackContext):
 
         sleep(1)
 
-        message = await parse_conversation_message(context=context,
-                                                   data={
-                                                       "chat_id": update.effective_chat.id,
-                                                       "message_id": update.effective_message.id,
-                                                       "text": text,
-                                                       "reply_markup": InlineKeyboardMarkup(keyboard)
-                                                   })
-        if message:
-            context.chat_data["message_to_delete"] = message.id
+        message_id = await parse_conversation_message(context=context,
+                                                      data={
+                                                          "chat_id": update.effective_chat.id,
+                                                          "message_id": update.effective_message.id,
+                                                          "text": text,
+                                                          "reply_markup": InlineKeyboardMarkup(keyboard)
+                                                      })
+        if message_id != update.effective_message.id:
+            context.chat_data["message_to_delete"] = message_id
 
         return SET_INTERVAL
 
@@ -636,8 +730,8 @@ async def set_app(update: Update, context: CallbackContext):
                 "current_version": context.chat_data["setting_app"]["current_version"],
                 "last_update": context.chat_data["setting_app"]["last_update"],
                 "app_id": context.chat_data["setting_app"]["app_id"],
-                "last_check": None,
                 "last_check_time": None,
+                "suspended": False,
                 "check_interval": context.bot_data["settings"]["default_check_interval"],
                 "send_on_check": context.bot_data["settings"]["default_send_on_check"]
             }
@@ -736,7 +830,7 @@ async def set_app(update: Update, context: CallbackContext):
                              message_id=int(update.callback_query.data.split(" ")[1]))
 
         text = ("🪛 <b>App Set Up</b>\n\n"
-                "🔸<u>Send On Check</u> – Scegli se ti verrà mandato un messaggio: <b>solo quando viene trovato"
+                "🔸 <u>Send On Check</u> – Scegli se ti verrà mandato un messaggio: <b>solo quando viene trovato"
                 " un aggiornamento</b> di questa app (<code>False</code>) "
                 "o <b>ad ogni controllo</b> (<code>True</code>)")
 
@@ -768,7 +862,7 @@ async def set_app(update: Update, context: CallbackContext):
                 "last_update": context.chat_data["setting_app"]["last_update"],
                 "app_id": context.chat_data["setting_app"]["app_id"],
                 "last_check": None,
-                "last_check_time": None
+                "suspended": False
             }
 
             ap = context.bot_data["apps"][str(len(context.bot_data["apps"]))]
@@ -781,6 +875,15 @@ async def set_app(update: Update, context: CallbackContext):
                             context.chat_data["setting_app"]["check_interval"]["timedelta"])
 
         ap["send_on_check"] = True if update.callback_query.data == "send_on_check_true" else False
+
+        bot_logger.info(f"App {ap["app_name"]} ({ap["app_id"]}) Settled Successfully -> "
+                        f"Interval: "
+                        f"{ap["check_interval"]["input"]["months"]}months "
+                        f"{ap["check_interval"]["input"]["days"]}days "
+                        f"{ap["check_interval"]["input"]["hours"]}hours "
+                        f"{ap["check_interval"]["input"]["minutes"]}minutes "
+                        f"{ap["check_interval"]["input"]["seconds"]}seconds – Send On Check: "
+                        f"{ap["send_on_check"]}")
 
         if "setting_app" in context.chat_data:
             del context.chat_data["setting_app"]
@@ -798,11 +901,13 @@ async def edit_app(update: Update, context: CallbackContext):
             del context.chat_data["edit_message"]
         if len(context.bot_data["apps"]) == 0:
             text = ("✏ <b>Edit App</b>\n\n"
-                    "ℹ Non hai applicazioni nell'elenco. Per aggiungerla, premi il tasto sotto.\n\n"
+                    "ℹ Non hai applicazioni nell'elenco.\n\n"
                     "🔸 Scegli un'opzione")
             keyboard = [
-                [InlineKeyboardButton(text="➕ Aggiungi App", callback_data="add_app")],
-                [InlineKeyboardButton(text="🔙 Torna indietro", callback_data="back_to_main_settings")]
+                [
+                    InlineKeyboardButton(text="➕ Aggiungi App", callback_data="add_app"),
+                    InlineKeyboardButton(text="🔙 Torna indietro", callback_data="back_to_main_settings")
+                ]
             ]
             await parse_conversation_message(context=context,
                                              data={
@@ -827,7 +932,7 @@ async def edit_app(update: Update, context: CallbackContext):
                      f"<code>{a['check_interval']['input']['seconds']}s</code>\n"
                      f"      <u>Send On Check</u> <code>{a['send_on_check']}</code>\n\n")
 
-        text += "🔸Scegli un'applicazione digitando il <u>numero corrispondente</u> o il <u>nome</u>"
+        text += "🔸 Scegli un'applicazione digitando il <u>numero corrispondente</u> o il <u>nome</u>"
 
         await parse_conversation_message(context, data={
             "chat_id": update.effective_chat.id,
@@ -861,7 +966,7 @@ async def edit_app(update: Update, context: CallbackContext):
                 sleep(1)
                 message = await context.bot.send_message(chat_id=update.effective_chat.id,
                                                          text="🔴 <b>App Not Found</b>\n\n"
-                                                              "🔸Scegli un'applicazione dell'elenco",
+                                                              "🔸 Scegli un'applicazione dell'elenco",
                                                          parse_mode='HTML')
 
                 keyboard = [
@@ -886,7 +991,7 @@ async def edit_app(update: Update, context: CallbackContext):
 
         if (message.text.strip().isnumeric() and
                 (int(message.text.strip()) > len(app_names) or int(message.text.strip()) < 0)):
-            text = "🔴 <b>Invalid Index</b>\n\n🔸Fornisci un indice valido"
+            text = "🔴 <b>Invalid Index</b>\n\n🔸 Fornisci un indice valido"
 
             await parse_conversation_message(context=context,
                                              data={
@@ -919,7 +1024,7 @@ async def edit_app(update: Update, context: CallbackContext):
                 f"▶️ <code>"
                 f"{context.bot_data["apps"][str(context.chat_data["app_index_to_edit"])]["app_name"]}"
                 f"</code>\n\n"
-                f"🔸È l'applicazione che vuoi modificare?")
+                f"🔸 È l'applicazione che vuoi modificare?")
 
         keyboard = [
             [
@@ -939,12 +1044,32 @@ async def edit_app(update: Update, context: CallbackContext):
 
 
 async def remove_app(update: Update, context: CallbackContext):
-    if update.callback_query and (update.callback_query.data == "remove_app"
-    or update.callback_query.data == "cancel_remove"):
+    if (update.callback_query and (update.callback_query.data == "delete_app"
+                                   or update.callback_query.data == "cancel_remove")):
         if "message_to_delete" in context.chat_data:
             await delete_message(context=context, chat_id=update.effective_chat.id,
                                  message_id=context.chat_data["message_to_delete"])
             del context.chat_data["message_to_delete"]
+
+        if len(context.bot_data["apps"]) == 0:
+            text = ("➖ <b>Remove App</b>\n\n"
+                    "ℹ Non hai applicazioni nell'elenco.\n\n"
+                    "🔸 Scegli un'opzione")
+            keyboard = [
+                [
+                    InlineKeyboardButton(text="➕ Aggiungi App", callback_data="add_app"),
+                    InlineKeyboardButton(text="🔙 Torna indietro", callback_data="back_to_main_settings")
+                ]
+            ]
+
+            await parse_conversation_message(context=context, data={
+                "chat_id": update.effective_chat.id,
+                "text": text,
+                "message_id": update.effective_message.id,
+                "reply_markup": InlineKeyboardMarkup(keyboard)
+            })
+
+            return ConversationHandler.END
 
         text = ("♻️ <b>Remove App</b>\n\n"
                 "🗃 <b>Elenco Applicazioni</b>\n\n")
@@ -953,16 +1078,16 @@ async def remove_app(update: Update, context: CallbackContext):
             a = context.bot_data["apps"][ap]
             text += f"  {ap}. <i>{a["app_name"]}</i>\n"
 
-        text += "🔸 Scegli un'applicazione da rimuovere indicando l'<u>indice</u> o il <u>nome</u>"
-        message = await parse_conversation_message(context=context,
-                                                   data={
-                                                       "chat_id": update.effective_chat.id,
-                                                       "text": text,
-                                                       "message_id": update.effective_message.id,
-                                                       "reply_markup": None
-                                                   })
+        text += "\n🔸 Scegli un'applicazione da rimuovere indicando l'<u>indice</u> o il <u>nome</u>"
+        message_id = await parse_conversation_message(context=context,
+                                                      data={
+                                                          "chat_id": update.effective_chat.id,
+                                                          "text": text,
+                                                          "message_id": update.effective_message.id,
+                                                          "reply_markup": None
+                                                      })
 
-        context.chat_data["select_app_message"] = message.id
+        context.chat_data["select_app_message"] = message_id
 
         return DELETE_APP_SELECT
 
@@ -973,11 +1098,11 @@ async def remove_app(update: Update, context: CallbackContext):
             del context.chat_data["message_to_delete"]
 
         if not update.message.text.strip().isnumeric():
-            if index := get_app_from_string(update.message.text.strip().lower(), context):
+            if index := await get_app_from_string(update.message.text.strip().lower(), context):
                 ap = context.bot_data["apps"][index]
                 context.chat_data["app_index_to_delete"] = index
                 text = (f"🔵 <b>App Found</b>\n\n"
-                        f"🔸 App Name: <code>{ap["app_name"]}\n\n"
+                        f"🔸 App Name: <code>{ap["app_name"]}</code>\n\n"
                         f"🔹 Vuoi rimuovere questa applicazione?")
                 keyboard = [
                     [
@@ -1002,39 +1127,39 @@ async def remove_app(update: Update, context: CallbackContext):
             text = ("🔴 <b>App Not Found</b>\n\n"
                     "🔸 Scegli un'applicazione da rimuovere indicando l'<u>indice</u> o il <u>nome</u>")
 
-            message = await parse_conversation_message(context=context,
-                                                       data={
-                                                           "chat_id": update.effective_chat.id,
-                                                           "text": text,
-                                                           "message_id": -1,
-                                                           "reply_markup": None
-                                                       })
+            message_id = await parse_conversation_message(context=context,
+                                                          data={
+                                                              "chat_id": update.effective_chat.id,
+                                                              "text": text,
+                                                              "message_id": -1,
+                                                              "reply_markup": None
+                                                          })
 
-            context.chat_data["message_to_delete"] = message.id
+            context.chat_data["message_to_delete"] = message_id
 
             return DELETE_APP_SELECT
 
         else:
             if (index := int(update.message.text.strip())) > len(context.bot_data["apps"]) or index < 0:
                 text = "❌ Inserisci un indice valido"
-    
-                message = await parse_conversation_message(context=context,
-                                                           data={
-                                                               "chat_id": update.effective_chat.id,
-                                                               "text": text,
-                                                               "message_id": -1,
-                                                               "reply_markup": None
-                                                           })
-    
-                context.chat_data["message_to_delete"] = message.id
-                
+
+                message_id = await parse_conversation_message(context=context,
+                                                              data={
+                                                                  "chat_id": update.effective_chat.id,
+                                                                  "text": text,
+                                                                  "message_id": -1,
+                                                                  "reply_markup": None
+                                                              })
+
+                context.chat_data["message_to_delete"] = message_id
+
                 return DELETE_APP_SELECT
             else:
                 ap = context.bot_data["apps"][index := update.message.text.strip()]
                 context.chat_data["app_index_to_delete"] = index
-                
+
                 text = (f"🔵 <b>App Found</b>\n\n"
-                        f"🔸 App Name: <code>{ap["app_name"]}\n\n"
+                        f"🔸 App Name: <code>{ap["app_name"]}</code>\n\n"
                         f"🔹 Vuoi rimuovere questa applicazione?")
                 keyboard = [
                     [
@@ -1045,7 +1170,7 @@ async def remove_app(update: Update, context: CallbackContext):
                         InlineKeyboardButton(text="⏸ Sospendi", callback_data="suspend_app")
                     ]
                 ]
-    
+
                 await context.bot.send_chat_action(chat_id=update.effective_chat.id, action=ChatAction.TYPING)
                 sleep(1)
                 message = await context.bot.send_message(chat_id=update.effective_chat.id,
@@ -1053,9 +1178,9 @@ async def remove_app(update: Update, context: CallbackContext):
                                                          reply_markup=InlineKeyboardMarkup(keyboard),
                                                          parse_mode='HTML')
                 context.chat_data["message_to_delete"] = message.id
-    
+
                 return DELETE_APP_CONFIRM
-            
+
     if update.callback_query and update.callback_query.data == "confirm_remove":
         if "select_app_message" in context.chat_data:
             await delete_message(context=context, chat_id=update.effective_chat.id,
@@ -1066,6 +1191,9 @@ async def remove_app(update: Update, context: CallbackContext):
                                  message_id=context.chat_data["message_to_delete"])
             del context.chat_data["message_to_delete"]
 
+        app_name = context.bot_data["apps"][context.chat_data["app_index_to_delete"]]["app_name"]
+        app_id = context.bot_data["apps"][context.chat_data["app_index_to_delete"]]["app_id"]
+
         for ap in context.bot_data["apps"]:
             if int(ap) < int(context.chat_data["app_index_to_delete"]):
                 continue
@@ -1073,6 +1201,8 @@ async def remove_app(update: Update, context: CallbackContext):
                 context.bot_data["apps"][ap] = context.bot_data["apps"][str(int(ap) + 1)]
         del context.bot_data["apps"][str(len(context.bot_data["apps"]))]
         del context.chat_data["app_index_to_delete"]
+
+        bot_logger.info(f"App {app_name} ({app_id}) deleted successfully")
 
         text = ("✔ <b>App Removed Successfully</b>\n\n"
                 "🔸 Scegli un'opzione")
@@ -1083,15 +1213,23 @@ async def remove_app(update: Update, context: CallbackContext):
             ]
         ]
 
-        message = await parse_conversation_message(context=context, data={
+        await parse_conversation_message(context=context, data={
             "chat_id": update.effective_chat.id,
             "text": text,
             "message_id": update.effective_message.id,
             "reply_markup": InlineKeyboardMarkup(keyboard)
         })
 
-        context.chat_data["message_to_delete"] = message.message_id
         return ConversationHandler.END
+
+
+async def suspend_app(update: Update, context: CallbackContext):
+    if update.callback_query and len(li := update.callback_query.data.split(" ")) > 1:
+        context.bot_data["apps"][str(li[1])]["suspended"] = True
+
+        text = (f"⏸ <b>Sospendi App</b>\n\n"
+                f"🔹  App <code>{context.bot_data["apps"][li[1]]["app_name"]} sospesa: non riceverai più aggiornamenti."
+                f" Puoi riattivarla dalle impostazioni.")
 
 
 async def see_app_settings(update: Update, context: CallbackContext):
@@ -1143,10 +1281,10 @@ async def parse_conversation_message(context: CallbackContext, data: dict):
                                             text=text,
                                             reply_markup=(reply_markup if reply_markup is not False else None),
                                             parse_mode="HTML")
-        return None
+        return message_id
 
     except telegram.error.BadRequest as e:
-        settings_logger.warning(f"Not able to edit message: {e}\nA new one will be sent.")
+        settings_logger.warning(f"Not able to edit message: {e}. A new one will be sent.")
 
         # se il messaggio è stato rimosso e ne viene mandato un altro, i tasti che contengono un id scatenerebbero
         # un'eccezione nelle fasi successive, ma il 'try-except...pass' ovvia al problema.
@@ -1169,7 +1307,7 @@ async def parse_conversation_message(context: CallbackContext, data: dict):
             await context.bot.edit_message_reply_markup(chat_id=chat_id,
                                                         message_id=message.id,
                                                         reply_markup=InlineKeyboardMarkup(keyboard))
-        return message
+        return message.id
 
 
 async def schedule_job_and_send_settled_app_message(update: Update, context: CallbackContext):
@@ -1244,8 +1382,15 @@ async def schedule_job_and_send_settled_app_message(update: Update, context: Cal
         }
     )
 
+    bot_logger.info(f"Repeating Job for app {ap["app_name"]} Scheduled Successfully "
+                    f"– Next Check at {(datetime.now(pytz.timezone('Europe/Rome')) 
+                                        + ap["check_interval"]["timedelta"]).strftime("%d %b %Y - %H:%M:%S")}")
+
     if not added:
         return EDIT_CONFIRM_APP
+
+    if "editing" in context.chat_data:
+        del context.chat_data["editing"]
 
     return ConversationHandler.END
 

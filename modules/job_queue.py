@@ -145,6 +145,10 @@ async def scheduled_app_check(context: ContextTypes.DEFAULT_TYPE):
         job_queue_logger.error("'app_id' or 'app_link' or 'app_index' are missing in Job data.")
         return
 
+    if (ap := context.bot_data["apps"][context.job.data["app_index"]])["suspended"]:
+        job_queue_logger.info(f"Check Suspended for app {ap["app_name"]}.")
+        return
+
     if (res := requests.get(context.job.data["app_link"])).status_code != 200:
         job_queue_logger.error(f"Not Able to Get Link {context.job.data["app_link"]}: {res.reason}")
         return
@@ -216,7 +220,7 @@ async def scheduled_app_check(context: ContextTypes.DEFAULT_TYPE):
                 ],
                 [
                     InlineKeyboardButton(text="🗑 Cancella Messaggio",
-                                         callback_data=f"delete_check_message {message.id}")
+                                         callback_data=f"delete_message {message.id}")
                 ]
             ]
 

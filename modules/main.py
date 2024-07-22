@@ -39,7 +39,7 @@ file_handler = handlers.RotatingFileHandler(filename="../misc/logs/main.log",
 bot_logger.addHandler(file_handler)
 
 
-CHANGE_SETTINGS, MENAGE_APPS, LIST_LAST_CHECKS, MENAGE_APPS_OPTIONS, LIST_APPS, ADD_APP = range(6)
+CHANGE_SETTINGS, MENAGE_APPS, UNSUSPEND_APP, MENAGE_APPS_OPTIONS, LIST_APPS, ADD_APP = range(6)
 
 SEND_LINK, CONFIRM_APP_NAME = range(2)
 
@@ -454,7 +454,7 @@ def main():
 
     suspend_app_conv_handler = ConversationHandler(
         entry_points=[
-            CallbackQueryHandler(pattern="^suspend_app.+$", callback=settings.suspend_app)
+
         ],
         states={},
         fallbacks=[]
@@ -475,6 +475,7 @@ def main():
                 add_app_conv_handler,
                 edit_app_conv_handler,
                 delete_app_conv_handler,
+                CallbackQueryHandler(pattern="unsuspend_app", callback=settings.suspend_app),
                 CallbackQueryHandler(pattern="list_app", callback=settings.list_apps),
                 CallbackQueryHandler(pattern="back_to_main_settings", callback=settings.menage_apps),
                 CallbackQueryHandler(pattern="settings", callback=settings.change_settings)
@@ -482,7 +483,10 @@ def main():
             LIST_APPS: [
                 CallbackQueryHandler(pattern="^back_to_main_settings.+$", callback=settings.menage_apps)
             ],
-            LIST_LAST_CHECKS: []
+            UNSUSPEND_APP: [
+                CallbackQueryHandler(pattern="^unsuspend_app.+$", callback=settings.suspend_app),
+                CallbackQueryHandler(pattern="^back_to_main_settings.+$", callback=settings.menage_apps)
+            ]
         },
         fallbacks=[],
         allow_reentry=True
@@ -493,8 +497,9 @@ def main():
     app.add_handler(conv_handler1)
     app.add_handler(conv_handler2)
     app.add_handler(set_app_conv_handler)
-    app.add_handler(CallbackQueryHandler(pattern="^delete_check_message.+$",
-                                         callback=settings.delete_callback_query_message))
+    app.add_handler(CallbackQueryHandler(pattern="^suspend_app.+$", callback=settings.suspend_app))
+    app.add_handler(CallbackQueryHandler(pattern="^delete_message.+$",
+                                         callback=settings.delete_extemporary_message))
     app.add_handler(CallbackQueryHandler(pattern="^edit_from_job.+$", callback=settings.see_app_settings))
     app.add_handler(edit_app_conv_handler)
 

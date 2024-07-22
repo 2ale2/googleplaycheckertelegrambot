@@ -27,7 +27,7 @@ settings_logger.addHandler(file_handler)
 
 bot_logger = logging.getLogger("bot_logger")
 
-CHANGE_SETTINGS, MENAGE_APPS, LIST_LAST_CHECKS, MENAGE_APPS_OPTIONS, LIST_APPS, ADD_APP = range(6)
+CHANGE_SETTINGS, MENAGE_APPS, UNSUSPEND_APP, MENAGE_APPS_OPTIONS, LIST_APPS, ADD_APP = range(6)
 
 SEND_LINK, CONFIRM_APP_NAME = range(2)
 
@@ -49,7 +49,7 @@ async def set_defaults(update: Update, context: CallbackContext):
                 f"<code>{inp["months"]}m{inp["days"]}d{inp["hours"]}h{inp["minutes"]}min{inp["seconds"]}s</code>\n"
                 f"  🔹 <u>Default Send On Check</u> "
                 f"<code>{context.bot_data["settings"]["default_send_on_check"]}</code>\n\n"
-                f"🔸 Scegli un'opzione")
+                f"🔸 Scegli un'opzione.")
 
         sleep(1)
 
@@ -306,7 +306,6 @@ async def menage_apps(update: Update, context: CallbackContext):
                     InlineKeyboardButton(text="➖ Rimuovi", callback_data="delete_app")
                 ],
                 [
-                    InlineKeyboardButton(text="⏸ Sospendi App", callback_data="suspend_app"),
                     InlineKeyboardButton(text="📄 Lista App", callback_data="list_apps")
                 ],
                 [
@@ -314,6 +313,11 @@ async def menage_apps(update: Update, context: CallbackContext):
                                          callback_data=f"settings {update.effective_message.id}")
                 ]
             ]
+
+            for ap in (a := context.bot_data["apps"]):
+                if a[ap]["suspended"]:
+                    keyboard[1].append(InlineKeyboardButton(text="⏯ Riattiva App", callback_data="unsuspend_app"))
+                    break
 
             await parse_conversation_message(context=context,
                                              data={
@@ -335,7 +339,7 @@ async def menage_apps(update: Update, context: CallbackContext):
                     ]
                 ]
                 text = ("🅾️ <code>No Apps Yet</code>\n\n"
-                        "🔸Usa la tastiera per aggiungerne")
+                        "🔸 Usa la tastiera per aggiungerne.")
 
                 await parse_conversation_message(context=context,
                                                  data={
@@ -363,7 +367,7 @@ async def menage_apps(update: Update, context: CallbackContext):
                              f"    <code>Send On Check</code> {context.bot_data['apps'][str(a)]["send_on_check"]}\n"
                              )
 
-                text += "\n🆘 Per i dettagli su un'applicazione, scegli 🖋 Modifica\n\n🔸Scegli un'opzione"
+                text += "\n🆘 Per i dettagli su un'applicazione, scegli 🖋 Modifica\n\n🔸Scegli un'opzione."
 
                 await parse_conversation_message(context=context,
                                                  data={
@@ -400,30 +404,34 @@ async def list_apps(update: Update, context: CallbackContext):
 
     if len(context.bot_data["apps"]) == 0:
         text += ("ℹ Nessuna app aggiunta.\n\n"
-                 "🔸 Scegli un'opzione")
+                 "🔸 Scegli un'opzione.")
 
     else:
         for a in context.bot_data["apps"]:
             ap = context.bot_data["apps"][a]
-            text += (f"  {a}. {ap["app_name"]}\n"
-                     f"    App ID: <code>{ap["app_id"]}</code>\n"
-                     f"    App Link: <a href=\"{ap["app_link"]}\">link 🔗</a>\n"
-                     f"    Current Version: <code>{ap["current_version"]}</code>\n"
-                     f"    Last Update: <code>{ap["last_update"]}</code>\n\n"
-                     f"    Check Interval: <code>"
+            text += (f"  {a}. <i>{ap["app_name"]}</i>\n"
+                     f"      🔸<u>App ID</u>: <code>{ap["app_id"]}</code>\n"
+                     f"      🔸<u>App Link</u>: <a href=\"{ap["app_link"]}\">link 🔗</a>\n"
+                     f"      🔸<u>Current Version</u>: <code>{ap["current_version"]}</code>\n"
+                     f"      🔸<u>Last Update</u>: <code>{ap["last_update"]}</code>\n\n"
+                     f"      🔸<u>Check Interval</u>: <code>"
                      f"{ap["check_interval"]["input"]["months"]}m"
                      f"{ap["check_interval"]["input"]["days"]}d"
                      f"{ap["check_interval"]["input"]["hours"]}h"
                      f"{ap["check_interval"]["input"]["minutes"]}min"
                      f"{ap["check_interval"]["input"]["seconds"]}s</code>\n"
-                     f"    Send On Check: <code>{ap["send_on_check"]}</code>\n\n")
+                     f"      🔸<u>Send On Check</u>: <code>{ap["send_on_check"]}</code>\n\n")
             
-            text += (f"    Last Check: <code>None</code>" 
+            text += (f"      🔸<u>Last Check</u>: <code>None</code>"
                      if ap["last_check"] is None 
-                     else f"    Last Check: <code>{ap["last_check"].strptime('%d %B %Y – %H:%M:%S')}</code>\n")
+                     else f"      🔸<u>Last Check</u>: <code>"
+                          f"{datetime.strftime(ap["last_check"], '%d %B %Y – %H:%M:%S')}"
+                          f"</code>\n")
             
-            text += (f"    Next Check: <code>{ap["next_check"].strptime('%d %B %Y – %H:%M:%S')}</code>\n\n"
-                     f"    <b>Suspended</b>: <code>{ap["suspended"]}</code>\n\n")
+            text += (f"      🔸<u>Next Check</u>: <code>{datetime.strftime(ap["next_check"], '%d %B %Y – %H:%M:%S')}"
+                     f"</code>\n\n      ⏸ <b>Suspended</b>: <code>{ap["suspended"]}</code>\n\n")
+
+        text += f"🔹 Scegli un'opzione."
 
     sleep(1)
     await parse_conversation_message(context=context, data={
@@ -445,7 +453,7 @@ async def add_app(update: Update, context: CallbackContext):
             for ap in context.bot_data["apps"]:
                 text += f"  {ap}. {context.bot_data['apps'][str(ap)]["app_name"]}\n"
 
-        text += "\n🔸 Manda il link all'applicazione su Google Play"
+        text += "\n🔸 Manda il link all'applicazione su Google Play."
 
         context.chat_data["send_link_message"] = update.effective_message.id
 
@@ -477,7 +485,7 @@ async def add_app(update: Update, context: CallbackContext):
                 text = (f"❌ A causa di un problema di rete, non riuscito a reperire il link che hai mandato.\n\n"
                         f"🔍 <i>Reason</i>\n{res.reason}\n\n"
                         f"🆘 Se il problema persiste, contatta @AleLntr\n\n"
-                        f"🔸 Puoi riprovare a mandare lo stesso link o cambiarlo")
+                        f"🔸 Puoi riprovare a mandare lo stesso link o cambiarlo.")
 
                 await parse_conversation_message(context=context,
                                                  data={
@@ -495,7 +503,7 @@ async def add_app(update: Update, context: CallbackContext):
                 if isinstance(app_details, NotFoundError):
                     text = ("⚠️ Ho avuto problemi a reperire l'applicazione.\n\n"
                             "Potrebbe essere un problema di API o l'applicazione potrebbe essere stata rimossa.\n\n"
-                            "🔸 Contatta @AleLntr per risolvere il problema, o manda un altro link")
+                            "🔸 Contatta @AleLntr per risolvere il problema, o manda un altro link.")
                 else:
                     text = "❌ Sembra che il link non sia corretto (manca l'ID del pacchetto)"
 
@@ -551,7 +559,7 @@ async def add_app(update: Update, context: CallbackContext):
                 text = f"❔ Il nome dell'applicazione è <b>{name}</b>?" \
                     if name else (f"⚠️ Il nome dell'applicazione è <code>None</code>. È possibile che ci sia "
                                   f"un problema di API o di struttura della pagina web.\n\n"
-                                  f"🔸 Contatta @AleLntr per risolvere il problema, oppure <u>invia un altro link</u>")
+                                  f"🔸 Contatta @AleLntr per risolvere il problema, oppure <u>invia un altro link</u>.")
 
                 message_id = await parse_conversation_message(context=context,
                                                               data={
@@ -695,7 +703,7 @@ async def set_app(update: Update, context: CallbackContext):
                 "\t🔹 <code>s</code> – Secondi\n\n"
                 "Inserisci tutti i valori corrispondenti anche se nulli.\n\n "
                 "<b>Esempio</b> 🔎 – <code>0m2d0h15min0s</code>\n\n"
-                "🔸 Fornisci l'intervallo che desideri")
+                "🔸 Fornisci l'intervallo che desideri.")
 
         context.chat_data["message_to_delete"] = update.effective_message.id
 
@@ -902,7 +910,7 @@ async def edit_app(update: Update, context: CallbackContext):
         if len(context.bot_data["apps"]) == 0:
             text = ("✏ <b>Edit App</b>\n\n"
                     "ℹ Non hai applicazioni nell'elenco.\n\n"
-                    "🔸 Scegli un'opzione")
+                    "🔸 Scegli un'opzione.")
             keyboard = [
                 [
                     InlineKeyboardButton(text="➕ Aggiungi App", callback_data="add_app"),
@@ -932,7 +940,7 @@ async def edit_app(update: Update, context: CallbackContext):
                      f"<code>{a['check_interval']['input']['seconds']}s</code>\n"
                      f"      <u>Send On Check</u> <code>{a['send_on_check']}</code>\n\n")
 
-        text += "🔸 Scegli un'applicazione digitando il <u>numero corrispondente</u> o il <u>nome</u>"
+        text += "🔸 Scegli un'applicazione digitando il <u>numero corrispondente</u> o il <u>nome</u>."
 
         await parse_conversation_message(context, data={
             "chat_id": update.effective_chat.id,
@@ -966,7 +974,7 @@ async def edit_app(update: Update, context: CallbackContext):
                 sleep(1)
                 message = await context.bot.send_message(chat_id=update.effective_chat.id,
                                                          text="🔴 <b>App Not Found</b>\n\n"
-                                                              "🔸 Scegli un'applicazione dell'elenco",
+                                                              "🔸 Scegli un'applicazione dell'elenco.",
                                                          parse_mode='HTML')
 
                 keyboard = [
@@ -991,7 +999,7 @@ async def edit_app(update: Update, context: CallbackContext):
 
         if (message.text.strip().isnumeric() and
                 (int(message.text.strip()) > len(app_names) or int(message.text.strip()) < 0)):
-            text = "🔴 <b>Invalid Index</b>\n\n🔸 Fornisci un indice valido"
+            text = "🔴 <b>Invalid Index</b>\n\n🔸 Fornisci un indice valido."
 
             await parse_conversation_message(context=context,
                                              data={
@@ -1054,11 +1062,12 @@ async def remove_app(update: Update, context: CallbackContext):
         if len(context.bot_data["apps"]) == 0:
             text = ("➖ <b>Remove App</b>\n\n"
                     "ℹ Non hai applicazioni nell'elenco.\n\n"
-                    "🔸 Scegli un'opzione")
+                    "🔸 Scegli un'opzione.")
             keyboard = [
                 [
                     InlineKeyboardButton(text="➕ Aggiungi App", callback_data="add_app"),
-                    InlineKeyboardButton(text="🔙 Torna indietro", callback_data="back_to_main_settings")
+                    InlineKeyboardButton(text="🔙 Torna indietro", callback_data=f"back_to_main_settings "
+                                                                                f"{update.effective_message.id}")
                 ]
             ]
 
@@ -1071,14 +1080,14 @@ async def remove_app(update: Update, context: CallbackContext):
 
             return ConversationHandler.END
 
-        text = ("♻️ <b>Remove App</b>\n\n"
+        text = ("➖ <b>Remove App</b>\n\n"
                 "🗃 <b>Elenco Applicazioni</b>\n\n")
 
         for ap in context.bot_data["apps"]:
             a = context.bot_data["apps"][ap]
             text += f"  {ap}. <i>{a["app_name"]}</i>\n"
 
-        text += "\n🔸 Scegli un'applicazione da rimuovere indicando l'<u>indice</u> o il <u>nome</u>"
+        text += "\n🔸 Scegli un'applicazione da rimuovere indicando l'<u>indice</u> o il <u>nome</u>."
         message_id = await parse_conversation_message(context=context,
                                                       data={
                                                           "chat_id": update.effective_chat.id,
@@ -1125,7 +1134,7 @@ async def remove_app(update: Update, context: CallbackContext):
                 return DELETE_APP_CONFIRM
 
             text = ("🔴 <b>App Not Found</b>\n\n"
-                    "🔸 Scegli un'applicazione da rimuovere indicando l'<u>indice</u> o il <u>nome</u>")
+                    "🔸 Scegli un'applicazione da rimuovere indicando l'<u>indice</u> o il <u>nome</u>.")
 
             message_id = await parse_conversation_message(context=context,
                                                           data={
@@ -1205,7 +1214,7 @@ async def remove_app(update: Update, context: CallbackContext):
         bot_logger.info(f"App {app_name} ({app_id}) deleted successfully")
 
         text = ("✔ <b>App Removed Successfully</b>\n\n"
-                "🔸 Scegli un'opzione")
+                "🔸 Scegli un'opzione.")
         keyboard = [
             [
                 InlineKeyboardButton(text="➖ Rimuovi Altra App", callback_data="delete_app"),
@@ -1224,12 +1233,84 @@ async def remove_app(update: Update, context: CallbackContext):
 
 
 async def suspend_app(update: Update, context: CallbackContext):
-    if update.callback_query and len(li := update.callback_query.data.split(" ")) > 1:
-        context.bot_data["apps"][str(li[1])]["suspended"] = True
+    if update.callback_query:
+        if update.callback_query.data.startswith("suspend_app"):
+            li = update.callback_query.data.split(" ")
+            context.bot_data["apps"][str(li[1])]["suspended"] = True
 
-        text = (f"⏸ <b>Sospendi App</b>\n\n"
-                f"🔹  App <code>{context.bot_data["apps"][li[1]]["app_name"]} sospesa: non riceverai più aggiornamenti."
-                f" Puoi riattivarla dalle impostazioni.")
+            text = (f"⏸ <b>Sospendi Controlli App</b>\n\n"
+                    f"🔹  App <code>{context.bot_data["apps"][li[1]]["app_name"]}</code> "
+                    f"sospesa: non riceverai più aggiornamenti.\n\n"
+                    f"🔸 Puoi riattivarla dalle impostazioni.")
+
+            keyboard = [
+                [InlineKeyboardButton(text="🗑 Chiudi", callback_data=f"delete_message {update.effective_message.id}")]
+            ]
+
+            await parse_conversation_message(context=context, data={
+                "chat_id": update.effective_chat.id,
+                "text": text,
+                "message_id": update.effective_message.id,
+                "reply_markup": InlineKeyboardMarkup(keyboard)
+            })
+
+            return UNSUSPEND_APP
+
+        elif update.callback_query.data == "unsuspend_app":
+            text = ("⏯ <b>Riattiva Controlli App</b>\n\n"
+                    "🔸 Dalla tastiera sotto, seleziona il nome dell'app che vuoi riattivare.")
+
+            keyboard = []
+
+            for ap in (a := context.bot_data["apps"]):
+                if a[ap]["suspended"]:
+                    keyboard.append([InlineKeyboardButton(text=f"{a[ap]["app_name"]}",
+                                                          callback_data=f"unsuspend_app {ap}")])
+
+            keyboard.append([InlineKeyboardButton(text="🔙 Torna Indietro", callback_data="back_to_main_settings")])
+
+            await parse_conversation_message(context=context, data={
+                "chat_id": update.effective_chat.id,
+                "text": text,
+                "message_id": update.effective_message.id,
+                "reply_markup": InlineKeyboardMarkup(keyboard)
+            })
+
+            return UNSUSPEND_APP
+
+        if update.callback_query.data.startswith("unsuspend_app"):
+            index = update.callback_query.data.split(" ")[1]
+            (ap := context.bot_data["apps"][index])["suspended"] = False
+            text = ("⏯ <b>Riattiva Controlli App</b>\n\n"
+                    f"ℹ Controlli app <code>{ap["app_name"]}</code> riattivati\n\n"
+                    f"🔸 Scegli un'opzione.")
+
+            suspended = False
+
+            for ap in (a := context.bot_data["apps"]):
+                if a[ap]["suspended"]:
+                    suspended = True
+                    break
+
+            keyboard = [
+                [
+                    InlineKeyboardButton(text="⏯ Riattiva Altra App", callback_data="unsuspend_app"),
+                    InlineKeyboardButton(text="🔙 Torna Indietro", callback_data="back_to_main_settings")
+                ]
+            ] if suspended else [
+                [
+                    InlineKeyboardButton(text="🔙 Torna Indietro", callback_data="back_to_main_settings")
+                ]
+            ]
+
+            await parse_conversation_message(context=context, data={
+                "chat_id": update.effective_chat.id,
+                "text": text,
+                "message_id": update.effective_message.id,
+                "reply_markup": InlineKeyboardMarkup(keyboard)
+            })
+
+            return MENAGE_APPS
 
 
 async def see_app_settings(update: Update, context: CallbackContext):
@@ -1245,7 +1326,7 @@ async def see_app_settings(update: Update, context: CallbackContext):
                 f"<code>{ap["check_interval"]["input"]["minutes"]}min</code>"
                 f"<code>{ap["check_interval"]["input"]["seconds"]}s</code>\n"
                 f"  🔹Send On Check: <code>{ap["send_on_check"]}</code>\n\n"
-                f"🔸 Scegli un'opzione")
+                f"🔸 Scegli un'opzione.")
 
         message = await context.bot.send_message(chat_id=update.effective_chat.id,
                                                  text=text,
@@ -1254,7 +1335,7 @@ async def see_app_settings(update: Update, context: CallbackContext):
         keyboard = [
             [
                 InlineKeyboardButton(text="✏ Modifica", callback_data=f"edit_app_from_check {index}"),
-                InlineKeyboardButton(text="🗑 Chiudi", callback_data=f"delete_check_message {message.id}")
+                InlineKeyboardButton(text="🗑 Chiudi", callback_data=f"delete_message {message.id}")
             ]
         ]
 
@@ -1280,7 +1361,8 @@ async def parse_conversation_message(context: CallbackContext, data: dict):
                                             message_id=message_id,
                                             text=text,
                                             reply_markup=(reply_markup if reply_markup is not False else None),
-                                            parse_mode="HTML")
+                                            parse_mode="HTML",
+                                            disable_web_page_preview=True)
         return message_id
 
     except telegram.error.BadRequest as e:
@@ -1291,7 +1373,8 @@ async def parse_conversation_message(context: CallbackContext, data: dict):
         message = await context.bot.send_message(chat_id=chat_id,
                                                  text=text,
                                                  reply_markup=reply_markup if reply_markup is not False else None,
-                                                 parse_mode="HTML")
+                                                 parse_mode="HTML",
+                                                 disable_web_page_preview=True)
 
         if "close_button" in data:
             button = keyboard
@@ -1424,7 +1507,7 @@ async def get_app_details_with_link(link: str):
         return app_details
 
 
-async def delete_callback_query_message(update: Update, context: CallbackContext):
+async def delete_extemporary_message(update: Update, context: CallbackContext):
     try:
         await context.bot.delete_message(chat_id=os.getenv("MY_ID"),
                                          message_id=int(update.callback_query.data.split(" ")[1]))

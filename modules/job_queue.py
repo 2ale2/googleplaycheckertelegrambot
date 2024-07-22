@@ -163,14 +163,14 @@ async def scheduled_app_check(context: ContextTypes.DEFAULT_TYPE):
         ap["last_check"] = datetime.datetime.now(pytz.timezone('Europe/Rome'))
         ap["next_check"] = datetime.datetime.now(pytz.timezone('Europe/Rome')) + ap["check_interval"]["timedelta"]
         new_version = app_details.get("version")
-        update_date = app_details.get("lastUpdatedOn")
+        update_date = datetime.datetime.strptime(app_details.get("lastUpdatedOn"), '%b %d, %Y')
 
         if isinstance(ap["last_update"], datetime.datetime):
             check = (new_version != ap["current_version"] or
-                     update_date != ap["last_update"].strftime("%b %d, %Y"))
+                     update_date.strftime("%d %B %Y") != ap["last_update"].strftime("%d %B %Y"))
         else:
             check = (new_version != ap["current_version"] or
-                     update_date != ap["last_update"])
+                     update_date.strftime("%d %B %Y") != ap["last_update"])
 
         text = None
 
@@ -193,13 +193,13 @@ async def scheduled_app_check(context: ContextTypes.DEFAULT_TYPE):
             )
 
             ap["current_version"] = new_version
-            ap["last_update"] = update_date
+            ap["last_update"] = update_date.strftime("%d %B %Y")
 
         elif ap["send_on_check"]:
             text = (f"👁‍🗨 <b>Check Performed</b> – No Updates Found\n\n"
                     f"   🔹App Name: <code>{ap["app_name"]}</code>\n"
                     f"   🔹Registered Version: <code>{ap["current_version"]}</code>\n"
-                    f"   🔹Updated On: <code>{update_date}</code>\n"
+                    f"   🔹Updated On: <code>{ap["last_update"]}</code>\n"
                     f"   ▪️Next Check: <code>{ap["next_check"].strftime('%d %B %Y – %H:%M:%S')}</code>\n\n"
                     f"🔸Scegli un'opzione")
 

@@ -277,7 +277,7 @@ async def change_settings(update: Update, context: CallbackContext):
 async def menage_apps(update: Update, context: CallbackContext):
     if update.callback_query:
         if update.callback_query.data == "menage_apps" or update.callback_query.data.startswith(
-                "back_to_main_settings"):
+                "back_to_main_settings") or update.callback_query.data.startswith("back_from_list"):
 
             if "format_message" in context.chat_data:
                 await delete_message(context=context,
@@ -410,35 +410,39 @@ async def list_apps(update: Update, context: CallbackContext):
         for a in context.bot_data["apps"]:
             ap = context.bot_data["apps"][a]
             text += (f"  {a}. <i>{ap["app_name"]}</i>\n"
-                     f"      🔸<u>App ID</u>: <code>{ap["app_id"]}</code>\n"
-                     f"      🔸<u>App Link</u>: <a href=\"{ap["app_link"]}\">link 🔗</a>\n"
-                     f"      🔸<u>Current Version</u>: <code>{ap["current_version"]}</code>\n"
-                     f"      🔸<u>Last Update</u>: <code>{ap["last_update"]}</code>\n\n"
-                     f"      🔸<u>Check Interval</u>: <code>"
+                     f"     🔸<u>App ID</u>: <code>{ap["app_id"]}</code>\n"
+                     f"     🔸<u>App Link</u>: <a href=\"{ap["app_link"]}\">link 🔗</a>\n"
+                     f"     🔸<u>Current Version</u>: <code>{ap["current_version"]}</code>\n"
+                     f"     🔸<u>Last Update</u>: <code>{ap["last_update"]}</code>\n\n"
+                     f"     🔸<u>Check Interval</u>: <code>"
                      f"{ap["check_interval"]["input"]["months"]}m"
                      f"{ap["check_interval"]["input"]["days"]}d"
                      f"{ap["check_interval"]["input"]["hours"]}h"
                      f"{ap["check_interval"]["input"]["minutes"]}min"
                      f"{ap["check_interval"]["input"]["seconds"]}s</code>\n"
-                     f"      🔸<u>Send On Check</u>: <code>{ap["send_on_check"]}</code>\n\n")
+                     f"     🔸<u>Send On Check</u>: <code>{ap["send_on_check"]}</code>\n\n")
             
-            text += (f"      🔸<u>Last Check</u>: <code>None</code>"
-                     if ap["last_check"] is None 
-                     else f"      🔸<u>Last Check</u>: <code>"
+            text += (f"     🔸<u>Last Check</u>: <code>None</code>\n"
+                     if ap["last_check"] is None
+                     else f"     🔸<u>Last Check</u>: <code>"
                           f"{datetime.strftime(ap["last_check"], '%d %B %Y – %H:%M:%S')}"
                           f"</code>\n")
             
-            text += (f"      🔸<u>Next Check</u>: <code>{datetime.strftime(ap["next_check"], '%d %B %Y – %H:%M:%S')}"
-                     f"</code>\n\n      ⏸ <b>Suspended</b>: <code>{ap["suspended"]}</code>\n\n")
+            text += (f"     🔸<u>Next Check</u>: <code>{datetime.strftime(ap["next_check"], '%d %B %Y – %H:%M:%S')}"
+                     f"</code>\n\n     ⏸ <b>Suspended</b>: <code>{ap["suspended"]}</code>\n\n")
 
         text += f"🔹 Scegli un'opzione."
+
+    keyboard = [
+        [InlineKeyboardButton(text="🔙 Torna Indietro", callback_data="back_from_list")]
+    ]
 
     sleep(1)
     await parse_conversation_message(context=context, data={
         "chat_id": update.effective_chat.id,
         "text": text,
         "message_id": -1,
-        "reply_markup": None
+        "reply_markup": InlineKeyboardMarkup(keyboard)
     })
 
     return LIST_APPS
@@ -546,7 +550,7 @@ async def add_app(update: Update, context: CallbackContext):
                     "app_name": name,
                     "app_link": link,
                     "current_version": current_version,
-                    "last_update": last_update,
+                    "last_update": last_update.strftime("%d %B %Y"),
                     "app_id": app_id
                 }
 
@@ -903,10 +907,10 @@ async def set_app(update: Update, context: CallbackContext):
 
 async def edit_app(update: Update, context: CallbackContext):
     if update.callback_query and update.callback_query.data == "edit_app":
-        if "edit_message" in context.chat_data:
-            await delete_message(context=context, chat_id=update.effective_chat.id,
-                                 message_id=context.chat_data["edit_message"])
-            del context.chat_data["edit_message"]
+        # if "edit_message" in context.chat_data:
+        #     await delete_message(context=context, chat_id=update.effective_chat.id,
+        #                          message_id=context.chat_data["edit_message"])
+        #     del context.chat_data["edit_message"]
         if len(context.bot_data["apps"]) == 0:
             text = ("✏ <b>Edit App</b>\n\n"
                     "ℹ Non hai applicazioni nell'elenco.\n\n"
@@ -1119,7 +1123,7 @@ async def remove_app(update: Update, context: CallbackContext):
                         InlineKeyboardButton(text="🚯 No", callback_data="cancel_remove")
                     ],
                     [
-                        InlineKeyboardButton(text="⏸ Sospendi", callback_data="suspend_app")
+                        InlineKeyboardButton(text="⏸ Sospendi", callback_data=f"suspend_app {index}")
                     ]
                 ]
 
@@ -1176,7 +1180,7 @@ async def remove_app(update: Update, context: CallbackContext):
                         InlineKeyboardButton(text="🚯 No", callback_data="cancel_remove")
                     ],
                     [
-                        InlineKeyboardButton(text="⏸ Sospendi", callback_data="suspend_app")
+                        InlineKeyboardButton(text="⏸ Sospendi", callback_data=f"suspend_app {index}")
                     ]
                 ]
 
@@ -1218,6 +1222,10 @@ async def remove_app(update: Update, context: CallbackContext):
         keyboard = [
             [
                 InlineKeyboardButton(text="➖ Rimuovi Altra App", callback_data="delete_app"),
+                InlineKeyboardButton(text="🔙 Torna indietro", callback_data="back_to_main_settings")
+            ]
+        ] if len(context.bot_data["apps"]) > 0 else [
+            [
                 InlineKeyboardButton(text="🔙 Torna indietro", callback_data="back_to_main_settings")
             ]
         ]

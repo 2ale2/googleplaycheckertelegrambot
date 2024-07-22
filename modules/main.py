@@ -445,19 +445,14 @@ def main():
                 MessageHandler(filters.TEXT, callback=settings.remove_app)
             ],
             DELETE_APP_CONFIRM: [
-                CallbackQueryHandler(pattern="suspend_app", callback=settings.remove_app),
+                CallbackQueryHandler(pattern="^suspend_app.+$", callback=settings.suspend_app),
                 CallbackQueryHandler(pattern="cancel_remove", callback=settings.remove_app)
             ]
         },
-        fallbacks=[CallbackQueryHandler(pattern="confirm_remove", callback=settings.remove_app)]
-    )
-
-    suspend_app_conv_handler = ConversationHandler(
-        entry_points=[
-
-        ],
-        states={},
-        fallbacks=[]
+        fallbacks=[
+            CallbackQueryHandler(pattern="confirm_remove", callback=settings.remove_app),
+            CallbackQueryHandler(pattern="back_to_main_settings", callback=settings.menage_apps)
+        ]
     )
 
     conv_handler2 = ConversationHandler(
@@ -476,19 +471,18 @@ def main():
                 edit_app_conv_handler,
                 delete_app_conv_handler,
                 CallbackQueryHandler(pattern="unsuspend_app", callback=settings.suspend_app),
-                CallbackQueryHandler(pattern="list_app", callback=settings.list_apps),
                 CallbackQueryHandler(pattern="back_to_main_settings", callback=settings.menage_apps),
                 CallbackQueryHandler(pattern="settings", callback=settings.change_settings)
             ],
             LIST_APPS: [
-                CallbackQueryHandler(pattern="^back_to_main_settings.+$", callback=settings.menage_apps)
+                CallbackQueryHandler(pattern="back_from_list", callback=settings.menage_apps)
             ],
             UNSUSPEND_APP: [
                 CallbackQueryHandler(pattern="^unsuspend_app.+$", callback=settings.suspend_app),
                 CallbackQueryHandler(pattern="^back_to_main_settings.+$", callback=settings.menage_apps)
             ]
         },
-        fallbacks=[],
+        fallbacks=[CallbackQueryHandler(pattern="list_app", callback=settings.list_apps)],
         allow_reentry=True
     )
 

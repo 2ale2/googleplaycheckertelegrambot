@@ -423,7 +423,8 @@ def main():
 
     edit_app_conv_handler = ConversationHandler(
         entry_points=[
-            CallbackQueryHandler(pattern="edit_app", callback=settings.edit_app)
+            CallbackQueryHandler(pattern="edit_app", callback=settings.edit_app),
+            CallbackQueryHandler(pattern="cancel_edit_app", callback=settings.edit_app)
         ],
         states={
             EDIT_SELECT_APP: [

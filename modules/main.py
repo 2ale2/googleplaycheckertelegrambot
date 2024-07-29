@@ -39,13 +39,13 @@ file_handler = handlers.RotatingFileHandler(filename="../misc/logs/main.log",
 bot_logger.addHandler(file_handler)
 
 
-CHANGE_SETTINGS, MENAGE_APPS, UNSUSPEND_APP, MENAGE_APPS_OPTIONS, LIST_APPS, ADD_APP = range(6)
+CHANGE_SETTINGS, MENAGE_APPS, UNSUSPEND_APP, MENAGE_APPS_OPTIONS, LIST_APPS = range(5)
 
-SEND_LINK, CONFIRM_APP_NAME = range(2)
+SEND_LINK, SEND_LINK_FROM_EDIT, SEND_LINK_FROM_REMOVE, CONFIRM_APP_NAME, ADD_OR_EDIT_FINISH = range(5)
 
 SET_INTERVAL, CONFIRM_INTERVAL, SEND_ON_CHECK, SET_UP_ENDED = range(4)
 
-EDIT_SELECT_APP, EDIT_CONFIRM_APP = range(2)
+EDIT_SELECT_APP, EDIT_CONFIRM_APP, EDIT_NO_APPS = range(3)
 
 DELETE_APP_SELECT, DELETE_APP_CONFIRM = range(2)
 
@@ -104,6 +104,13 @@ async def set_data(app: Application):
     if "last_checks" not in app.bot_data:
         app.bot_data["last_checks"] = {}
 
+    if "actions" not in app.bot_data:
+        app.bot_data["actions"] = {
+            "adding": False,
+            "editing": False,
+            "editing_from_check": False
+        }
+
     for ap in app.bot_data["apps"]:
         li = []
         i = app.bot_data["apps"][ap]
@@ -148,6 +155,13 @@ async def set_data(app: Application):
 
         for i in li:
             del app.bot_data["apps"][i]
+
+    if "editing" in app.bot_data:
+        del app.bot_data["editing"]
+    if "adding" in app.bot_data:
+        del app.bot_data["adding"]
+    if "removing" in app.bot_data:
+        del app.bot_data["removing"]
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -196,7 +210,7 @@ async def tutorial(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "  1. il <u>link all'applicazione</u> che ti interessa;\n"
                 "  2. l'<u>intervallo di controllo</u> tra due check;\n"
                 "  3. in quali <u>condizioni</u> vuoi ricevere il messaggio.\n\n"
-                "ℹ <b>Verrai guidato in ogni passaggio.</b> In caso di problemi, contatta @AleLntr."
+                "ℹ <b>Verrai guidato in ogni passaggio.</b> In caso di problemi, contatta @AleLntr.\n\n"
                 "1️⃣ <b>Al Primo Avvio</b>\n"
                 "Vengono settate le impostazioni di default, utili al mio funzionamento. Da ora, <b>tutti</b> i dati "
                 "verranno salvati all'interno di alcune variabili permanenti."
@@ -211,16 +225,16 @@ async def tutorial(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "check di default</b> – se non viene impostato per una certa applicazione – e il <b>parametro sulla "
                 "condizione di invio del messaggio</b>, di default, che specifica se il messaggio andrà mandato solo"
                 " se viene rilevato un aggiornamento oppure ad ogni controllo.\n\n"
-                "2️⃣ <b>Impostazioni</b> – Il bot consente alcune semplici operazioni, tra cui:"
-                "\n\n🔸 <b>Aggiunta di applicazioni da monitorare</b>\n  L'aggiunta di un'applicazione può essere fatta"
+                "2️⃣ <b>Funzioni</b> – Il bot consente alcune semplici operazioni, tra cui:"
+                "\n\n🔸 <b>Aggiunta di applicazioni da monitorare</b>\nL'aggiunta di un'applicazione può essere fatta"
                 " tramite il passaggio del link al Play Store."
-                "\n\n🔸 <b>Settaggio delle applicazioni</b>\n  Quando un'applicazione viene aggiunta, è richiesta "
+                "\n\n🔸 <b>Settaggio delle applicazioni</b>\nQuando un'applicazione viene aggiunta, è richiesta "
                 "l'impostazione di controllo."
-                "\n\n🔸 <b>Modifica delle impostazioni di app già aggiunte</b>\n  Da un apposito menu, sarà possibile "
+                "\n\n🔸 <b>Modifica delle impostazioni di app già aggiunte</b>\nDa un apposito menu, sarà possibile "
                 "cambiare le impostazioni relative ad un'applicazione precedentemente aggiunta."
-                "\n\n🔸 <b>Sospensione o rimozione di un'applicazione</b>\n  Potrai anche sospendere gli aggiornamenti"
+                "\n\n🔸 <b>Sospensione o rimozione di un'applicazione</b>\nPotrai anche sospendere gli aggiornamenti"
                 " e riattivarli in un secondo momento, o rimuovere un'applicazione dall'elenco di quelle tracciate."
-                "\n\n🔸 <b>Modifica delle impostazioni di Default</b>\n  Tutti i valori possono essere cambiati tramite "
+                "\n\n🔸 <b>Modifica delle impostazioni di Default</b>\nTutti i valori possono essere cambiati tramite "
                 "le impostazioni.\n\n"
                 "➡ <b>Nota Importante</b> – Per consentire al bot di inviarti messaggi, ricordati di mantenere la chat "
                 "attiva mantenendovi almeno un messaggio all'interno, altrimenti il bot non ti potrà scrivere.")
@@ -283,66 +297,53 @@ async def send_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return CHANGE_SETTINGS
 
 
+async def explore_handlers(matches: list, handler_s, update, level=0):
+    indent = ' ' * (level * 4)  # Create indentation for better readability
+    for handler in handler_s:
+        if isinstance(handler, ConversationHandler):
+            print(f"{indent}Exploring ConversationHandler at level {level}")
+            # Explore entry points
+            for entry_point in handler.entry_points:
+                if hasattr(entry_point, "pattern"):
+                    print(f"{indent}Entry point pattern: {entry_point.pattern}")
+                if entry_point.check_update(update):
+                    print(f"{indent}Match found in entry point at level {level}")
+                    matches.append(handler)
+
+            # Recursively explore states
+            for state in handler.states:
+                print(f"{indent}Exploring state: {state}")
+                await explore_handlers(matches, handler.states[state], update, level + 1)
+
+            # Explore fallbacks
+            for fallback in handler.fallbacks:
+                if hasattr(fallback, "pattern"):
+                    print(f"{indent}Fallback pattern: {fallback.pattern}")
+                if fallback.check_update(update):
+                    print(f"{indent}Match found in fallback at level {level}")
+                    matches.append(handler)
+
+        else:
+            if hasattr(handler, "pattern"):
+                print(f"{indent}Handler pattern: {handler.pattern}")
+            if handler.check_update(update):
+                print(f"{indent}Match found at level {level}")
+                matches.append(handler)
+
+    return matches
+
+
 async def catch_update(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.callback_query and ("settings" in update.callback_query.data):
+    matched_handlers = []
+    if update.callback_query and ("back_to_settings" in update.callback_query.data):
         print(update.callback_query.data)
-        for h in context.application.handlers:
-            for j in context.application.handlers[h]:
-                if isinstance(j, ConversationHandler):
-                    for i in j.entry_points:
-                        if hasattr(i, "pattern"):
-                            print(i.pattern)
-                        print(i.check_update(update))
-                    for i in j.states:
-                        for li in j.states[i]:
-                            if isinstance(li, ConversationHandler):
-                                for i1 in li.entry_points:
-                                    if hasattr(i1, "pattern"):
-                                        print(i1.pattern)
-                                    if i1.check_update(update):
-                                        print(i1.check_update(update))
-                                for i1 in li.states:
-                                    for li1 in li.states[i1]:
-                                        if isinstance(li1, ConversationHandler):
-                                            for i2 in li1.entry_points:
-                                                if hasattr(i2, "pattern"):
-                                                    print(i2.pattern)
-                                                if i2.check_update(update):
-                                                    print(i2.check_update(update))
-                                            for i2 in li1.states:
-                                                for li2 in li1.states[i2]:
-                                                    if hasattr(li2, "pattern"):
-                                                        print(li2.pattern)
-                                                    if li2.check_update(update):
-                                                        print(li2.check_update(update))
-                                            for i2 in li1.fallbacks:
-                                                if hasattr(i2, "pattern"):
-                                                    print(i2.pattern)
-                                                if i2.check_update(update):
-                                                    print(i2.check_update(update))
-                                        if hasattr(li1, "pattern"):
-                                            print(li1.pattern)
-                                        if li1.check_update(update):
-                                            print(li1.check_update(update))
-                                for i1 in li.fallbacks:
-                                    if hasattr(i1, "pattern"):
-                                        print(i1.pattern)
-                                    if i1.check_update(update):
-                                        print(i1.check_update(update))
-                            if hasattr(li, "pattern"):
-                                print(li.pattern)
-                            if li.check_update(update):
-                                print(li.check_update(update))
-                    for i in j.fallbacks:
-                        if hasattr(i, "pattern"):
-                            print(i.pattern)
-                        if i.check_update(update):
-                            print(i.check_update(update))
-                        return
-                if hasattr(j, "pattern"):
-                    print(j.pattern)
-                if j.check_update(update):
-                    print(j.check_update(update))
+        for handler_group in context.application.handlers.values():
+            matched_handlers = await explore_handlers(matched_handlers, handler_group, update)
+        if matched_handlers:
+            print(f"Matched handlers: {matched_handlers}")
+        else:
+            print("No matching handler found")
+        print("=====================================================")
 
 
 def main():
@@ -379,6 +380,31 @@ def main():
         name="default_settings_conv_handler"
     )
 
+    set_app_conv_handler = ConversationHandler(
+        entry_points=[
+            CallbackQueryHandler(pattern="app_name_from_link_correct", callback=settings.set_app)
+        ],
+        states={
+            SET_INTERVAL: [
+                MessageHandler(filters=filters.TEXT, callback=settings.set_app),
+                CallbackQueryHandler(pattern="set_default_values", callback=settings.set_app)
+            ],
+            CONFIRM_INTERVAL: [
+                CallbackQueryHandler(pattern="interval_correct", callback=settings.set_app),
+                CallbackQueryHandler(pattern="interval_incorrect", callback=settings.set_app)
+            ],
+            SEND_ON_CHECK: [
+                CallbackQueryHandler(pattern="^send_on_check.+$", callback=settings.set_app)
+            ]
+        },
+        fallbacks=[
+            CallbackQueryHandler(pattern="^back_to_settings$", callback=settings.send_menage_apps_menu)
+        ],
+        map_to_parent={
+            ConversationHandler.END: ADD_OR_EDIT_FINISH
+        }
+    )
+
     add_app_conv_handler = ConversationHandler(
         entry_points=[
             CallbackQueryHandler(pattern="add_app", callback=settings.add_app)
@@ -386,89 +412,73 @@ def main():
         states={
             SEND_LINK: [
                 MessageHandler(filters=filters.TEXT, callback=settings.add_app)
+            ],
+            SEND_LINK_FROM_EDIT: [
+                MessageHandler(filters=filters.TEXT, callback=settings.add_app)
+            ],
+            SEND_LINK_FROM_REMOVE: [
+                MessageHandler(filters=filters.TEXT, callback=settings.add_app)
+            ],
+            CONFIRM_APP_NAME: [
+                set_app_conv_handler,
+                CallbackQueryHandler(pattern="app_name_from_link_not_correct", callback=settings.add_app)
+            ],
+            ADD_OR_EDIT_FINISH: []
+        },
+        fallbacks=[
+            CallbackQueryHandler(pattern="^back_to_settings$", callback=settings.send_menage_apps_menu)
+        ],
+        map_to_parent={
+            ConversationHandler.END: MENAGE_APPS,
+            SEND_LINK_FROM_EDIT: ConversationHandler.END,
+            SEND_LINK_FROM_REMOVE: ConversationHandler.END
+        },
+        allow_reentry=True  # per consentire di aggiungere un'altra app
+    )
+
+    edit_app_conv_handler = ConversationHandler(
+        entry_points=[
+            CallbackQueryHandler(pattern="edit_app", callback=settings.edit_app)
+        ],
+        states={
+            EDIT_SELECT_APP: [
+                add_app_conv_handler,
+                MessageHandler(filters.TEXT, callback=settings.edit_app)
+            ],
+            ADD_OR_EDIT_FINISH: []
+        },
+        fallbacks=[
+            CallbackQueryHandler(pattern="^back_to_settings$", callback=settings.send_menage_apps_menu)
+        ],
+        map_to_parent={
+            ConversationHandler.END: MENAGE_APPS
+        },
+        allow_reentry=True  # per consentire di modificare un'altra app
+    )
+
+    delete_app_conv_handler = ConversationHandler(
+        entry_points=[
+            CallbackQueryHandler(pattern="delete_app", callback=settings.remove_app)
+        ],
+        states={
+            DELETE_APP_SELECT: [
+                add_app_conv_handler,
+                MessageHandler(filters.TEXT, callback=settings.remove_app)
+            ],
+            DELETE_APP_CONFIRM: [
+                CallbackQueryHandler(pattern="confirm_remove", callback=settings.remove_app),
+                CallbackQueryHandler(pattern="cancel_remove", callback=settings.remove_app),
+                CallbackQueryHandler(pattern="^suspend_from_remove.+$", callback=settings.remove_app)
             ]
         },
         fallbacks=[
-            CallbackQueryHandler(pattern="back_to_settings", callback=settings.send_menage_apps_menu)
-        ]
+            CallbackQueryHandler(pattern="^back_to_settings$", callback=settings.send_menage_apps_menu)
+        ],
+        allow_reentry=True,  # per consentire di rimuovere un'altra app o riselezionare l'app
+        map_to_parent={
+           ConversationHandler.END: MENAGE_APPS
+        }
     )
-
-    # set_app_conv_handler = ConversationHandler(
-    #     entry_points=[
-    #         CallbackQueryHandler(pattern="app_name_from_link_correct", callback=settings.set_app),
-    #         CallbackQueryHandler(pattern="confirm_app_to_edit", callback=settings.set_app),
-    #         CallbackQueryHandler(pattern="^edit_app_from_check.+$", callback=settings.set_app)
-    #     ],
-    #     states={
-    #         SET_INTERVAL: [
-    #             MessageHandler(filters.TEXT, callback=settings.set_app),
-    #             CallbackQueryHandler(pattern="set_default_values", callback=settings.set_app),
-    #             CallbackQueryHandler(pattern="edit_set_default_values", callback=settings.set_app)
-    #         ],
-    #         CONFIRM_INTERVAL: [
-    #             CallbackQueryHandler(pattern="^interval_incorrect.+$", callback=settings.set_app),
-    #             CallbackQueryHandler(pattern="^interval_correct.+$", callback=settings.set_app)
-    #         ],
-    #         SEND_ON_CHECK: [
-    #             CallbackQueryHandler(pattern="send_on_check_true", callback=settings.set_app),
-    #             CallbackQueryHandler(pattern="send_on_check_false", callback=settings.set_app)
-    #         ],
-    #     },
-    #     fallbacks=[CallbackQueryHandler(pattern="^back_to_settings.+$", callback=settings.menage_apps)],
-    #     allow_reentry=True
-    # )
-    #
-    # add_app_conv_handler = ConversationHandler(
-    #     entry_points=[CallbackQueryHandler(pattern="add_app", callback=settings.add_app)],
-    #     states={
-    #         SEND_LINK: [
-    #             MessageHandler(filters=filters.TEXT, callback=settings.add_app),
-    #         ],
-    #         CONFIRM_APP_NAME: [
-    #             set_app_conv_handler,
-    #             CallbackQueryHandler(pattern="app_name_from_link_not_correct", callback=settings.add_app),
-    #         ]
-    #     },
-    #     fallbacks=[CallbackQueryHandler(pattern="^back_to_settings.+$", callback=settings.menage_apps)],
-    #     allow_reentry=True
-    # )
-    #
-    # app_names = settings.create_edit_app_list(app.bot_data)
-    #
-    # edit_app_conv_handler = ConversationHandler(
-    #     entry_points=[
-    #         CallbackQueryHandler(pattern="edit_app", callback=settings.edit_app),
-    #         CallbackQueryHandler(pattern="cancel_edit_app", callback=settings.edit_app)
-    #     ],
-    #     states={
-    #         EDIT_SELECT_APP: [
-    #             MessageHandler(filters.TEXT, callback=settings.edit_app),
-    #             MessageHandler(filters.Text(strings=app_names), callback=settings.edit_app),
-    #         ],
-    #         EDIT_CONFIRM_APP: [
-    #             set_app_conv_handler
-    #         ]
-    #     },
-    #     fallbacks=[CallbackQueryHandler(pattern="back_settings", callback=settings.menage_apps)],
-    #     allow_reentry=True
-    # )
-    #
-    # delete_app_conv_handler = ConversationHandler(
-    #     entry_points=[CallbackQueryHandler(pattern="delete_app", callback=settings.remove_app)],
-    #     states={
-    #         DELETE_APP_SELECT: [
-    #             MessageHandler(filters.TEXT, callback=settings.remove_app)
-    #         ],
-    #         DELETE_APP_CONFIRM: [
-    #             CallbackQueryHandler(pattern="^suspend_from_remove.+$", callback=settings.suspend_app),
-    #             CallbackQueryHandler(pattern="cancel_remove", callback=settings.remove_app)
-    #         ]
-    #     },
-    #     fallbacks=[
-    #         CallbackQueryHandler(pattern="confirm_remove", callback=settings.remove_app),
-    #         CallbackQueryHandler(pattern="^back_from_remove.+$", callback=settings.menage_apps)
-    #     ]
-    # )
 
     conv_handler2 = ConversationHandler(
         entry_points=[
@@ -479,15 +489,15 @@ def main():
             CHANGE_SETTINGS: [
                 CallbackQueryHandler(pattern="menage_apps", callback=settings.menage_apps),
                 conv_handler1,
-                CallbackQueryHandler(pattern="back_to_main_menu", callback=send_menu)
+                CallbackQueryHandler(pattern="^back_to_main_menu$", callback=send_menu)
             ],
             MENAGE_APPS: [
                 add_app_conv_handler,
-                # edit_app_conv_handler,
-                # delete_app_conv_handler,
+                edit_app_conv_handler,
+                delete_app_conv_handler,
                 CallbackQueryHandler(pattern="list_apps", callback=settings.list_apps),
                 CallbackQueryHandler(pattern="unsuspend_app", callback=settings.suspend_app),
-                CallbackQueryHandler(pattern="back_to_main_settings", callback=settings.menage_apps),
+                CallbackQueryHandler(pattern="^back_to_main_settings$", callback=settings.menage_apps),
                 CallbackQueryHandler(pattern="settings", callback=settings.change_settings)
             ],
             LIST_APPS: [
@@ -496,13 +506,15 @@ def main():
             UNSUSPEND_APP: [
                 CallbackQueryHandler(pattern="^unsuspend_app.+$", callback=settings.suspend_app),
                 CallbackQueryHandler(pattern="^back_to_main_settings.+$", callback=settings.menage_apps)
-            ]
+            ],
         },
-        fallbacks=[CallbackQueryHandler(pattern="list_app", callback=settings.list_apps)],
+        fallbacks=[
+            CallbackQueryHandler(pattern="list_app", callback=settings.list_apps)
+        ],
         allow_reentry=True
     )
 
-    # app.add_handler(TypeHandler(Update, callback=catch_update), group=-1)
+    app.add_handler(TypeHandler(Update, callback=catch_update), group=-1)
 
     app.add_handler(conv_handler1)
     app.add_handler(conv_handler2)

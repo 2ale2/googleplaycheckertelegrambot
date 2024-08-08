@@ -746,8 +746,7 @@ async def set_app(update: Update, context: CallbackContext):
             index = context.chat_data["app_index_to_edit"]
             context.bot_data["apps"][index]["check_interval"] = context.bot_data["settings"]["default_check_interval"]
             context.bot_data["apps"][index]["send_on_check"] = context.bot_data["settings"]["default_send_on_check"]
-            await schedule_job_and_send_settled_app_message(update, context)
-            return ConversationHandler.END
+            return await schedule_job_and_send_settled_app_message(update, context)
 
     if not update.callback_query:
         try:
@@ -1117,10 +1116,12 @@ async def remove_app(update: Update, context: CallbackContext):
             await delete_message(context=context, chat_id=update.effective_chat.id,
                                  message_id=update.effective_message.id)
             ap = context.bot_data["apps"][index]
+            suspended = ap["suspended"]
             context.chat_data["app_index_to_delete"] = index
             text = (f"🔵 <b>App Found</b>\n\n"
                     f"🔸 App Name: <code>{ap["app_name"]}</code>\n\n"
                     f"🔹 Vuoi rimuovere questa applicazione?")
+
             keyboard = [
                 [
                     InlineKeyboardButton(text="🚮 Si", callback_data="confirm_remove"),
@@ -1128,6 +1129,11 @@ async def remove_app(update: Update, context: CallbackContext):
                 ],
                 [
                     InlineKeyboardButton(text="⏸ Sospendi", callback_data=f"suspend_from_remove {index}")
+                ]
+            ] if not suspended else [
+                [
+                    InlineKeyboardButton(text="🚮 Si", callback_data="confirm_remove"),
+                    InlineKeyboardButton(text="🚯 No", callback_data="delete_app")
                 ]
             ]
 
@@ -1242,7 +1248,7 @@ async def suspend_app(update: Update, context: CallbackContext):
                 [InlineKeyboardButton(text="🗑 Chiudi", callback_data=f"delete_message {update.effective_message.id}")]
             ] if update.callback_query.data.startswith("suspend_app") else [
                 [InlineKeyboardButton(text="🔙 Torna Indietro",
-                                      callback_data=f"back_to_main_settings {update.effective_message.id}")]
+                                      callback_data="back_to_settings_settled")]
             ]
 
             await parse_conversation_message(context=context, data={
@@ -1253,7 +1259,7 @@ async def suspend_app(update: Update, context: CallbackContext):
             })
 
             return (ConversationState.UNSUSPEND_APP if update.callback_query.data.startswith("suspend_app")
-                    else ConversationState.DELETE_APP_CONFIRM)
+                    else ConversationHandler.END)
 
         elif update.callback_query.data == "unsuspend_app":
             text = ("⏯ <b>Riattiva Controlli App</b>\n\n"
@@ -1266,7 +1272,7 @@ async def suspend_app(update: Update, context: CallbackContext):
                     keyboard.append([InlineKeyboardButton(text=f"{a[ap]["app_name"]}",
                                                           callback_data=f"unsuspend_app {ap}")])
 
-            keyboard.append([InlineKeyboardButton(text="🔙 Torna Indietro", callback_data="back_to_main_settings")])
+            keyboard.append([InlineKeyboardButton(text="🔙 Torna Indietro", callback_data="back_to_settings")])
 
             await parse_conversation_message(context=context, data={
                 "chat_id": update.effective_chat.id,
@@ -1435,20 +1441,28 @@ async def schedule_job_and_send_settled_app_message(update: Update, context: Cal
         ]
     ] if "from_check" not in context.chat_data else [
         [
-            InlineKeyboardButton(text="🗑 Chiudi", callback_data=f"delete_message {update.effective_message.id}")
+            InlineKeyboardButton(text="🗑 Chiudi", callback_data="delete_message {}")
         ]
     ]
+
+    data = {
+        "chat_id": update.effective_chat.id,
+        "text": text,
+        "message_id": update.effective_message.id,
+        "keyboard": keyboard
+    } if "from_check" not in context.chat_data else {
+        "chat_id": update.effective_chat.id,
+        "text": text,
+        "message_id": update.effective_message.id,
+        "keyboard": keyboard,
+        "close_button": [1, 1]
+    }
 
     if "from_check" in context.chat_data:
         del context.chat_data["from_check"]
 
     context.job_queue.run_once(callback=job_queue.scheduled_send_message,
-                               data={
-                                   "chat_id": update.effective_chat.id,
-                                   "text": text,
-                                   "message_id": update.effective_message.id,
-                                   "keyboard": keyboard
-                               },
+                               data=data,
                                when=1.5)
 
     if not added:
@@ -1513,7 +1527,8 @@ async def delete_extemporary_message(update: Update, context: CallbackContext):
     try:
         await context.bot.delete_message(chat_id=update.effective_chat.id,
                                          message_id=int(update.callback_query.data.split(" ")[1]))
-    except telegram.error.BadRequest:
+    except telegram.error.BadRequest as e:
+        bot_logger.info(f"Not able to delete message: {e}")
         pass
 
 
@@ -1528,7 +1543,8 @@ async def delete_message(context: ContextTypes.DEFAULT_TYPE, chat_id: int, messa
 async def get_app_from_string(string: str, context: CallbackContext):
     whitelist = set('abcdefghijklmnopqrstuvwxyz ')
     for a in context.bot_data["apps"]:
-        if string == ''.join(filter(whitelist.__contains__, context.bot_data["apps"][a]["app_name"].lower())):
+        if (string == ''.join(filter(whitelist.__contains__, context.bot_data["apps"][a]["app_name"].lower())).
+                replace("  ", " ")):
             return a
     return None
 
@@ -1600,6 +1616,7 @@ def create_edit_app_list(bot_data: dict) -> list:
     app_names = []
     if "apps" in bot_data:
         for a in bot_data["apps"]:
-            app_names.append(''.join(filter(whitelist.__contains__, str(bot_data["apps"][a]["app_name"]).lower())))
+            app_names.append(''.join(filter(whitelist.__contains__, str(bot_data["apps"][a]["app_name"]).lower())).
+                             replace("  ", " "))
 
     return app_names or []

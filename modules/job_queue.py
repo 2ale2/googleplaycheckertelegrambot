@@ -205,7 +205,7 @@ async def scheduled_app_check(context: ContextTypes.DEFAULT_TYPE):
 
         if text:
             message = await context.bot.send_message(
-                chat_id=os.getenv("MY_ID"),
+                chat_id=os.getenv("ADMIN_ID"),
                 text=text,
                 parse_mode="HTML"
             )
@@ -224,7 +224,7 @@ async def scheduled_app_check(context: ContextTypes.DEFAULT_TYPE):
                 ]
             ]
 
-            await context.bot.edit_message_reply_markup(chat_id=os.getenv("MY_ID"),
+            await context.bot.edit_message_reply_markup(chat_id=os.getenv("ADMIN_ID"),
                                                         message_id=message.id,
                                                         reply_markup=InlineKeyboardMarkup(keyboard))
         else:

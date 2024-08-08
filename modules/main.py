@@ -263,8 +263,9 @@ async def send_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ]
     ]
 
-    text = ("🔹 Ciao ҒŁҴҠӖҲ!\n\nSono il bot che controlla gli aggiornamenti delle applicazioni sul Play Store.\n\n"
-            "Scegli un'opzione ⬇")
+    text = (f"🔹 Ciao padrone {update.effective_user.first_name}!\n\n"
+            f"Sono il bot che controlla gli aggiornamenti delle applicazioni sul Play Store.\n\n"
+            f"Scegli un'opzione ⬇")
     if update.callback_query and update.callback_query.data == "back_to_main_menu":
         await settings.parse_conversation_message(context=context,
                                                   data={
@@ -391,7 +392,8 @@ def main():
             ]
         },
         fallbacks=[
-            CallbackQueryHandler(pattern="^back_to_settings$", callback=settings.send_menage_apps_menu)
+            CallbackQueryHandler(pattern="^back_to_settings$", callback=settings.send_menage_apps_menu),
+            CallbackQueryHandler(pattern="^delete_message.+$", callback=settings.delete_extemporary_message)
         ],
         map_to_parent={
             ConversationHandler.END: ConversationHandler.END
@@ -448,7 +450,7 @@ def main():
             ConversationState.DELETE_APP_CONFIRM: [
                 CallbackQueryHandler(pattern="confirm_remove", callback=settings.remove_app),
                 CallbackQueryHandler(pattern="cancel_remove", callback=settings.remove_app),
-                CallbackQueryHandler(pattern="^suspend_from_remove.+$", callback=settings.remove_app)
+                CallbackQueryHandler(pattern="^suspend_from_remove.+$", callback=settings.suspend_app)
             ]
         },
         fallbacks=[

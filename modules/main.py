@@ -170,15 +170,15 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if context.bot_data["settings"]["tutorial"] is False:
         await context.bot.send_chat_action(action=ChatAction.TYPING, chat_id=update.effective_chat.id)
         keyboard = [
-            [InlineKeyboardButton(text="🆘 Tutorial", callback_data="print_tutorial {}")],
+            [InlineKeyboardButton(text="💡 Informazioni Generali", callback_data="print_tutorial {}")],
             [InlineKeyboardButton(text="⏭ Procedi – Settaggio Valori Default", callback_data="set_defaults {}")],
         ]
 
         context.job_queue.run_once(callback=job_queue.scheduled_send_message,
                                    data={
                                        "chat_id": update.effective_chat.id,
-                                       "text": "Prima di cominciare ad usare questo bot, vuoi un breve tutorial sul suo"
-                                               " funzionamento generale?\n\n@AleLntr dice che è consigliabile 😊",
+                                       "text": "Prima di cominciare ad usare questo bot, vuoi un breve riepilogo sul"
+                                               " suo funzionamento generale?\n\n@AleLntr dice che è consigliabile 😊",
                                        "keyboard": keyboard,
                                        "web_preview": False,
                                        "close_button": [[1, 1], [2, 1]]
@@ -192,7 +192,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 @send_action(ChatAction.TYPING)
 async def tutorial(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.bot_data["settings"]["tutorial"] = True
     if update.callback_query.data.startswith("print_tutorial"):
         text = ("💡 <b>Informazioni Generali</b>\n\n"
                 "Sono in grado di controllare periodicamente la presenza di aggiornamenti relativi ad applicazioni sul "
@@ -210,7 +209,7 @@ async def tutorial(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "⚠️ Il salvataggio di tali informazioni sul file <code>persistence</code> serve per garantire che "
                 "i dati non vengano persi in caso di arresti anomali dello script del bot. <u>La rimozione di tale "
                 "file, pertanto, comporta la cancellazione della sua memoria</u> e, in tal caso, il bot dovrà "
-                "essere reimpostato, come ti attingi a fare.\n\n"
+                "essere reimpostato, come ti accingi a fare.\n\n"
                 "I valori che stai per impostare costituiscono le <b>impostazioni di default</b>: l'<b>intervallo di "
                 "check di default</b> – se non viene impostato per una certa applicazione – e il <b>parametro sulla "
                 "condizione di invio del messaggio</b>, di default, che specifica se il messaggio andrà mandato solo"
@@ -224,10 +223,18 @@ async def tutorial(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "cambiare le impostazioni relative ad un'applicazione precedentemente aggiunta."
                 "\n\n🔸 <b>Sospensione o rimozione di un'applicazione</b>\nPotrai anche sospendere gli aggiornamenti"
                 " e riattivarli in un secondo momento, o rimuovere un'applicazione dall'elenco di quelle tracciate."
+                "\n\n🔸 <b>Lista delle applicazioni aggiunte</b>\nPotrai visualizzare tutti i dettagli delle "
+                "applicazioni che hai aggiunto (sospese e non)."
                 "\n\n🔸 <b>Modifica delle impostazioni di Default</b>\nTutti i valori possono essere cambiati tramite "
-                "le impostazioni.\n\n"
+                "le impostazioni."
+                "\n\n🔸 <b>Lista degli ultimi 10 controlli effettuati</b>\nPuoi visualizzare una lista degli ultimi "
+                "check fatti, assieme ai dettagli su eventuali aggiornamenti."
+                "\n\n🆘 In caso di problemi, controlla i file di log presenti nella cartella del progetto in "
+                "<code>/misc/logs</code> e contatta @AleLntr.\n\n"
                 "➡ <b>Nota Importante</b> – Per consentire al bot di inviarti messaggi, ricordati di mantenere la chat "
-                "attiva mantenendovi almeno un messaggio all'interno, altrimenti il bot non ti potrà scrivere.")
+                "attiva mantenendovi almeno un messaggio all'interno, altrimenti il bot non ti potrà scrivere.\n\n"
+                "⚠ Tieni inoltre presente che Telegram impone un limite di 30 messaggi al secondo, quindi fai"
+                " attenzione a non eccedere tale limite.")
         keyboard = [
             [InlineKeyboardButton(text="⏭ Procedi – Settaggio Valori Default", callback_data="set_defaults {}")]
         ]

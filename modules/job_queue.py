@@ -23,6 +23,8 @@ console_handler = logging.StreamHandler()
 console_handler.setFormatter(formatter)
 job_queue_logger.addHandler(console_handler)
 
+WHO = os.getenv("ADMIN_ID")
+
 
 async def scheduled_send_message(context: ContextTypes.DEFAULT_TYPE):
     data = context.job.data
@@ -227,7 +229,7 @@ async def scheduled_app_check(context: ContextTypes.DEFAULT_TYPE):
             lc.append(last_check)
 
             message = await context.bot.send_message(
-                chat_id=os.getenv("MY_ID"),
+                chat_id=WHO,
                 text=text,
                 parse_mode="HTML"
             )
@@ -246,7 +248,7 @@ async def scheduled_app_check(context: ContextTypes.DEFAULT_TYPE):
                 ]
             ]
 
-            await context.bot.edit_message_reply_markup(chat_id=os.getenv("MY_ID"),
+            await context.bot.edit_message_reply_markup(chat_id=WHO,
                                                         message_id=message.id,
                                                         reply_markup=InlineKeyboardMarkup(keyboard))
         else:

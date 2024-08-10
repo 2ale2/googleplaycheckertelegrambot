@@ -76,8 +76,6 @@ async def set_defaults(update: Update, context: CallbackContext):
         if len(li := update.callback_query.data.split(" ")) > 1:
             await delete_message(context=context, message_id=int(li[1]), chat_id=update.effective_chat.id)
 
-        context.bot_data["settings"]["tutorial"] = True
-
         sleep(1)
 
         message = await context.bot.send_message(chat_id=update.effective_chat.id,
@@ -95,12 +93,17 @@ async def set_defaults(update: Update, context: CallbackContext):
                                                       "\t5️⃣ <code>s</code> – Secondi\n\n"
                                                       "Inserisci tutti i valori corrispondenti anche se nulli.\n\n "
                                                       "<b>Esempio</b> 🔎 – <code>0m2d0h15min0s</code>\n\n"
+                                                      "ℹ È consigliabile non scendere sotto i 30 secondi.\n\n"
                                                       "🔹Non è un valore definitivo: lo puoi cambiare quando vorrai.",
                                                  parse_mode="HTML")
         context.chat_data["messages_to_delete"] = message.id
         return 2
 
     if not update.callback_query and update.message:
+        if "message_to_delete" in context.chat_data:
+            await delete_message(context=context, chat_id=update.effective_chat.id,
+                                 message_id=context.chat_data["message_to_delete"])
+            del context.chat_data["message_to_delete"]
         try:
             # noinspection DuplicatedCode
             months = int(update.message.text.split('m')[0])
@@ -128,10 +131,27 @@ async def set_defaults(update: Update, context: CallbackContext):
         except ValueError:
             text = ("❌ <b>Usa il formato indicato</b>, non aggiungere, togliere o cambiare lettere."
                     "\n\n🔎 <code>#m#d#h#min#s</code>")
-            await context.bot.send_message(chat_id=update.effective_chat.id,
-                                           text=text, parse_mode="HTML")
+            message = await context.bot.send_message(chat_id=update.effective_chat.id,
+                                                     text=text, parse_mode="HTML")
+            context.chat_data["messages_to_delete"] = message.id
             return 2
         else:
+            if months < 0 or days < 0 or hours < 0 or minutes < 0 or seconds < 0:
+                text = ("❌ <b>Tutti i valori devono essere positivi</b>\n\n🔸 Fornisci un nuovo intervallo.\n\n"
+                        "🔎 <code>#m#d#h#min#s</code>")
+                message = await context.bot.send_message(chat_id=update.effective_chat.id,
+                                                         text=text, parse_mode="HTML")
+                context.chat_data["messages_to_delete"] = message.id
+                return 2
+
+            if months == 0 and days == 0 and hours == 0 and minutes == 0 and seconds == 0:
+                text = ("❌ <b>L'intervallo non può essere nullo</b>\n\n🔸 Fornisci un nuovo intervallo.\n\n"
+                        "ℹ È consigliabile non scendere sotto i 30 secondi.\n\n🔎 <code>#m#d#h#min#s</code>")
+                message = await context.bot.send_message(chat_id=update.effective_chat.id,
+                                                         text=text, parse_mode="HTML")
+                context.chat_data["messages_to_delete"] = message.id
+                return 2
+
             context.bot_data["settings"]["default_check_interval"]["timedelta"] = timedelta(days=days + months * 30,
                                                                                             seconds=seconds,
                                                                                             minutes=minutes,
@@ -170,7 +190,7 @@ async def set_defaults(update: Update, context: CallbackContext):
     if update.callback_query and update.callback_query.data.startswith("interval_correct"):
         i = context.bot_data["settings"]["default_check_interval"]["input"]
         bot_logger.info(f"Default Interval -> Setting Completed: "
-                        f"{i["months"]}m{i["days"]}d{i["months"]}h{i["months"]}min{i["months"]}s")
+                        f"{i["months"]}m{i["days"]}d{i["months"]}h{i["months"]}min{i["seconds"]}s")
 
         if len(li := update.callback_query.data.split(" ")) > 1:
             await delete_message(context=context, chat_id=update.effective_chat.id,
@@ -237,6 +257,8 @@ async def set_defaults(update: Update, context: CallbackContext):
         await context.bot.edit_message_reply_markup(chat_id=update.effective_chat.id,
                                                     message_id=message.id,
                                                     reply_markup=InlineKeyboardMarkup(keyboard))
+        if not context.bot_data["settings"]["tutorial"]:
+            context.bot_data["settings"]["tutorial"] = True
         return ConversationHandler.END
 
 

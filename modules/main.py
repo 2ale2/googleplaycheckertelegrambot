@@ -92,7 +92,7 @@ async def set_data(app: Application):
             "tutorial": False
         }
     if "last_checks" not in app.bot_data:
-        app.bot_data["last_checks"] = {}
+        app.bot_data["last_checks"] = []
 
     if "actions" not in app.bot_data:
         app.bot_data["actions"] = {
@@ -257,9 +257,6 @@ async def send_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [
             InlineKeyboardButton(text="⚙ Settings", callback_data="settings"),
             InlineKeyboardButton(text="📄 List Last Checks", callback_data="last_checks")
-        ],
-        [
-            InlineKeyboardButton(text="🔐 Close Menu", callback_data="close_menu {}")
         ]
     ]
 
@@ -267,6 +264,8 @@ async def send_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"Sono il bot che controlla gli aggiornamenti delle applicazioni sul Play Store.\n\n"
             f"Scegli un'opzione ⬇")
     if update.callback_query and update.callback_query.data == "back_to_main_menu":
+        keyboard.append([InlineKeyboardButton(text="🔐 Close Menu",
+                                              callback_data="delete_message {}".format(update.effective_message.id))])
         await settings.parse_conversation_message(context=context,
                                                   data={
                                                       "chat_id": update.effective_chat.id,
@@ -275,6 +274,7 @@ async def send_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
                                                       "message_id": update.effective_message.message_id
                                                   })
     else:
+        keyboard.append([InlineKeyboardButton(text="🔐 Close Menu", callback_data="delete_message {}")])
         await context.bot.send_chat_action(chat_id=update.effective_chat.id, action=ChatAction.TYPING)
         context.job_queue.run_once(callback=job_queue.scheduled_send_message,
                                    data={
@@ -375,7 +375,8 @@ def main():
         entry_points=[
             CallbackQueryHandler(pattern="app_name_from_link_correct", callback=settings.set_app),
             CallbackQueryHandler(pattern="confirm_app_to_edit", callback=settings.set_app),
-            CallbackQueryHandler(pattern="^edit_app_from_check.+$", callback=settings.set_app)
+            CallbackQueryHandler(pattern="^edit_app_from_check.+$", callback=settings.set_app),
+            CallbackQueryHandler(pattern="^edit_app_from_add.+$", callback=settings.set_app)
         ],
         states={
             ConversationState.SET_INTERVAL: [
@@ -462,13 +463,13 @@ def main():
     conv_handler2 = ConversationHandler(
         entry_points=[
             CallbackQueryHandler(pattern="settings", callback=settings.change_settings),
-            CallbackQueryHandler(pattern="^default_setting_finished.+$", callback=send_menu)
+            CallbackQueryHandler(pattern="^default_setting_finished.+$", callback=send_menu),
+            CallbackQueryHandler(pattern="last_checks", callback=settings.list_last_checks)
         ],
         states={
             ConversationState.CHANGE_SETTINGS: [
                 CallbackQueryHandler(pattern="menage_apps", callback=settings.menage_apps),
-                conv_handler1,
-                CallbackQueryHandler(pattern="^back_to_main_menu$", callback=send_menu)
+                conv_handler1
             ],
             ConversationState.MANAGE_APPS: [
                 add_app_conv_handler,
@@ -489,6 +490,7 @@ def main():
             ],
         },
         fallbacks=[
+            CallbackQueryHandler(pattern="^back_to_main_menu$", callback=send_menu),
             CallbackQueryHandler(pattern="^back_to_settings$", callback=settings.menage_apps),
             CallbackQueryHandler(pattern="^back_to_settings_no_apps$", callback=settings.send_menage_apps_menu),
             CallbackQueryHandler(pattern="^back_to_settings_settled$", callback=settings.send_menage_apps_menu)

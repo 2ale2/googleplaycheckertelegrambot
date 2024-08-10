@@ -437,6 +437,43 @@ async def list_apps(update: Update, context: CallbackContext):
     return ConversationState.LIST_APPS
 
 
+@send_action(action=ChatAction.TYPING)
+async def list_last_checks(update: Update, context: CallbackContext):
+    await delete_message(context=context, chat_id=update.effective_chat.id, message_id=update.effective_message.id)
+    text = "📜 <b>Last Checks</b>\n\n"
+    keyboard = [
+        [
+            InlineKeyboardButton(text="🔙 Torna Indietro", callback_data="back_to_main_menu")
+        ]
+    ]
+
+    if len(context.bot_data["last_checks"]) == 0:
+        text += "🔸 Nessun controllo effettuato."
+
+    else:
+        for check in context.bot_data["last_checks"]:
+            text += (f"🔸<b> {check["app_name"]}</b>\n"
+                     f"🔹 Time: <code>{datetime.strftime(check["time"], '%d %B %Y – %H:%M:%S')}</code>\n")
+            if check["update_found"]:
+                text += (f"▫ Update Found ➡ Upgraded from <code>{check["current_version"]}</code> "
+                         f"to <code>{check["new_version"]}</code>")
+            else:
+                text += f"▪ Update Not Found ➡ <code>Current Version: {check["current_version"]}</code>"
+            text += "\n\n"
+
+        text += "ℹ I controlli di eventuali app sospese non sono in lista."
+
+    sleep(1)
+    await parse_conversation_message(context=context,
+                                     data={
+                                         "chat_id": update.effective_chat.id,
+                                         "message_id": update.effective_message.id,
+                                         "text": text,
+                                         "reply_markup": InlineKeyboardMarkup(keyboard)
+                                     })
+    return ConversationState.CHANGE_SETTINGS
+
+
 async def add_app(update: Update, context: CallbackContext):
     if update.callback_query and update.callback_query.data == "add_app":
         text = "➕ <b>Add App</b>\n\n"
@@ -476,7 +513,7 @@ async def add_app(update: Update, context: CallbackContext):
             if res.status_code != 200:
                 settings_logger.warning(f"Not able to gather link {link}: {res.reason}")
                 text = (f"❌ A causa di un problema di rete, non riuscito a reperire il link che hai mandato.\n\n"
-                        f"🔍 <i>Reason</i>\n{res.reason}\n\n"
+                        f"🔍 <i>Reason</i>\n<code>❓ {res.reason}</code>\n\n"
                         f"🆘 Se il problema persiste, contatta @AleLntr\n\n"
                         f"🔸 Puoi riprovare a mandare lo stesso link o cambiarlo.")
 
@@ -491,6 +528,24 @@ async def add_app(update: Update, context: CallbackContext):
                 return ConversationState.SEND_LINK
 
             app_details = await get_app_details_with_link(link=link)
+
+            for ap in (a := context.bot_data["apps"]):
+                if a[ap]["app_id"] == app_details.get('appId'):
+                    keyboard = [
+                        [
+                            InlineKeyboardButton(text="✏ Modifica l'App", callback_data=f"edit_app_from_add {ap}"),
+                            InlineKeyboardButton(text="🔙 Torna Indietro", callback_data="back_to_settings")
+                        ]
+                    ]
+                    await parse_conversation_message(context=context,
+                                                     data={
+                                                         "chat_id": update.effective_chat.id,
+                                                         "message_id": -1,
+                                                         "text": "⚠ Hai già aggiunto questa applicazione.\n\n"
+                                                                 "🔸 Scegli un'opzione.",
+                                                         "reply_markup": InlineKeyboardMarkup(keyboard)
+                                                     })
+                    return ConversationHandler.END
 
             if isinstance(app_details, NotFoundError) or isinstance(app_details, IndexError):
                 if isinstance(app_details, NotFoundError):
@@ -629,7 +684,7 @@ async def add_app(update: Update, context: CallbackContext):
             ],
             [
                 InlineKeyboardButton(text="🔙 Torna Indietro",
-                                     callback_data=f"back_to_main_settings {update.effective_message.id}")
+                                     callback_data="back_to_settings")
             ]
         ]
 
@@ -660,10 +715,12 @@ async def set_app(update: Update, context: CallbackContext):
 
         context.bot_data["editing"] = True
 
-    if update.callback_query and update.callback_query.data.startswith("edit_app_from_check"):
+    if update.callback_query and (update.callback_query.data.startswith("edit_app_from_check") or
+                                  update.callback_query.data.startswith("edit_app_from_add")):
         index = update.callback_query.data.split(" ")[1]
         context.chat_data["app_index_to_edit"] = index
-        context.chat_data["from_check"] = True
+        if update.callback_query.data.startswith("edit_app_from_check"):
+            context.chat_data["from_check"] = True
         ap = context.bot_data["apps"][index]
         context.chat_data["setting_app"] = {
             "app_name": ap["app_name"],
@@ -682,7 +739,7 @@ async def set_app(update: Update, context: CallbackContext):
     if update.callback_query and (update.callback_query.data == "app_name_from_link_correct" or
                                   update.callback_query.data.startswith("interval_incorrect") or
                                   update.callback_query.data == "confirm_app_to_edit" or
-                                  update.callback_query.data.startswith("edit_app_from_check")):
+                                  update.callback_query.data.startswith("edit_app_from_")):
 
         # inizio procedura di settaggio
         text = ("🪛 <b>App Set Up</b>\n\n"

@@ -192,6 +192,14 @@ async def scheduled_app_check(context: ContextTypes.DEFAULT_TYPE):
                 f"🔸Scegli un'opzione"
             )
 
+            last_check = {
+                "time": ap["last_check"],
+                "app_name": ap["app_name"],
+                "current_version": ap["current_version"],
+                "new_version": new_version,
+                "update_found": True
+            }
+
             ap["current_version"] = new_version
             ap["last_update"] = update_date.strftime("%d %B %Y")
 
@@ -203,9 +211,23 @@ async def scheduled_app_check(context: ContextTypes.DEFAULT_TYPE):
                     f"   ▪️Next Check: <code>{ap["next_check"].strftime('%d %B %Y – %H:%M:%S')}</code>\n\n"
                     f"🔸Scegli un'opzione")
 
+            last_check = {
+                "time": ap["last_check"],
+                "app_name": ap["app_name"],
+                "current_version": ap["current_version"],
+                "update_found": False
+            }
+
         if text:
+            if len(lc := context.bot_data["last_checks"]) == 10:
+                lc.pop(0)
+
+            # entro nell'if solo se text != None
+            # noinspection PyUnboundLocalVariable
+            lc.append(last_check)
+
             message = await context.bot.send_message(
-                chat_id=os.getenv("ADMIN_ID"),
+                chat_id=os.getenv("MY_ID"),
                 text=text,
                 parse_mode="HTML"
             )
@@ -224,7 +246,7 @@ async def scheduled_app_check(context: ContextTypes.DEFAULT_TYPE):
                 ]
             ]
 
-            await context.bot.edit_message_reply_markup(chat_id=os.getenv("ADMIN_ID"),
+            await context.bot.edit_message_reply_markup(chat_id=os.getenv("MY_ID"),
                                                         message_id=message.id,
                                                         reply_markup=InlineKeyboardMarkup(keyboard))
         else:

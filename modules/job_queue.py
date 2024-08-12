@@ -150,17 +150,17 @@ async def scheduled_app_check(context: ContextTypes.DEFAULT_TYPE):
         return
 
     if (ap := context.bot_data["apps"][context.job.data["app_index"]])["suspended"]:
-        job_queue_logger.info(f"Check Suspended for app {ap["app_name"]}.")
+        job_queue_logger.info(f"Check Suspended for app {ap['app_name']}.")
         return
 
     if (res := requests.get(context.job.data["app_link"])).status_code != 200:
-        job_queue_logger.error(f"Not Able to Get Link {context.job.data["app_link"]}: {res.reason}")
+        job_queue_logger.error(f"Not Able to Get Link {context.job.data['app_link']}: {res.reason}")
         return
 
     try:
         app_details = app(app_id=context.job.data["app_id"])
     except NotFoundError as e:
-        job_queue_logger.error(f"App '{context.job.data["app_id"]}' not found: {e}")
+        job_queue_logger.error(f"App '{context.job.data['app_id']}' not found: {e}")
     else:
         index = context.job.data["app_index"]
         ap = context.bot_data["apps"][index]
@@ -180,17 +180,17 @@ async def scheduled_app_check(context: ContextTypes.DEFAULT_TYPE):
 
         if check:
             text = (f"🚨 <b>New Update Found</b>\n\n"
-                    f"   🔹App Name: <code>{ap["app_name"]}</code>\n"
-                    f"   🔹Registered Version: <code>{ap["current_version"]}</code>\n"
+                    f"   🔹App Name: <code>{ap['app_name']}</code>\n"
+                    f"   🔹Registered Version: <code>{ap['current_version']}</code>\n"
                     f"   🔹New Version: {new_version}\n"
-                    f"   🔹Updated On: <code>{ap["last_update"]}</code>\n\n"
+                    f"   🔹Updated On: <code>{ap['last_update']}</code>\n\n"
                     f"🔸Scegli un'opzione") if new_version != 'Varies with device' else (
                 f"🚨 <b>New Update Found</b>\n\n"
-                f"   🔹App Name: <code>{ap["app_name"]}</code>\n"
-                f"   🔹Registered Version: ⚠️ <code>{ap["current_version"]}</code>\n"
+                f"   🔹App Name: <code>{ap['app_name']}</code>\n"
+                f"   🔹Registered Version: ⚠️ <code>{ap['current_version']}</code>\n"
                 f"   🔹New Version: {new_version}\n"
-                f"   🔹Updated On: <code>{ap["last_update"]}</code>\n\n"
-                f"   ▪️Next Check: <code>{ap["next_check"].strftime('%d %B %Y – %H:%M:%S')}</code>\n\n"
+                f"   🔹Updated On: <code>{ap['last_update']}</code>\n\n"
+                f"   ▪️Next Check: <code>{ap['next_check'].strftime('%d %B %Y – %H:%M:%S')}</code>\n\n"
                 f"ℹ Potrebbe essere che l'aggiornamento non riguardi il client di interesse perché la versione"
                 f" dipende dal dispositivo.\n\n"
                 f"🔸Scegli un'opzione"
@@ -209,10 +209,10 @@ async def scheduled_app_check(context: ContextTypes.DEFAULT_TYPE):
 
         elif ap["send_on_check"]:
             text = (f"👁‍🗨 <b>Check Performed</b> – No Updates Found\n\n"
-                    f"   🔹App Name: <code>{ap["app_name"]}</code>\n"
-                    f"   🔹Registered Version: <code>{ap["current_version"]}</code>\n"
-                    f"   🔹Updated On: <code>{ap["last_update"]}</code>\n"
-                    f"   ▪️Next Check: <code>{ap["next_check"].strftime('%d %B %Y – %H:%M:%S')}</code>\n\n"
+                    f"   🔹App Name: <code>{ap['app_name']}</code>\n"
+                    f"   🔹Registered Version: <code>{ap['current_version']}</code>\n"
+                    f"   🔹Updated On: <code>{ap['last_update']}</code>\n"
+                    f"   ▪️Next Check: <code>{ap['next_check'].strftime('%d %B %Y – %H:%M:%S')}</code>\n\n"
                     f"🔸Scegli un'opzione")
 
             last_check = {

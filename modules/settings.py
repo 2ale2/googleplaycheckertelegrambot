@@ -35,9 +35,9 @@ async def set_defaults(update: Update, context: CallbackContext):
         inp = context.bot_data["settings"]["default_check_interval"]["input"]
         text = (f"🔧 <b>Impostazioni di Default</b>\n\n"
                 f"  🔹 <u>Default Interval</u> "
-                f"<code>{inp["months"]}m{inp["days"]}d{inp["hours"]}h{inp["minutes"]}min{inp["seconds"]}s</code>\n"
+                f"<code>{inp['months']}m{inp['days']}d{inp['hours']}h{inp['minutes']}min{inp['seconds']}s</code>\n"
                 f"  🔹 <u>Default Send On Check</u> "
-                f"<code>{context.bot_data["settings"]["default_send_on_check"]}</code>\n\n"
+                f"<code>{context.bot_data['settings']['default_send_on_check']}</code>\n\n"
                 f"🔸 Scegli un'opzione.")
 
         sleep(1)
@@ -190,7 +190,7 @@ async def set_defaults(update: Update, context: CallbackContext):
     if update.callback_query and update.callback_query.data.startswith("interval_correct"):
         i = context.bot_data["settings"]["default_check_interval"]["input"]
         bot_logger.info(f"Default Interval -> Setting Completed: "
-                        f"{i["months"]}m{i["days"]}d{i["months"]}h{i["months"]}min{i["seconds"]}s")
+                        f"{i['months']}m{i['days']}d{i['months']}h{i['months']}min{i['seconds']}s")
 
         if len(li := update.callback_query.data.split(" ")) > 1:
             await delete_message(context=context, chat_id=update.effective_chat.id,
@@ -230,19 +230,19 @@ async def set_defaults(update: Update, context: CallbackContext):
             context.bot_data["settings"]["default_send_on_check"] = False
 
         bot_logger.info(f"Default Send On Check -> Setting Completed: "
-                        f"{context.bot_data["settings"]["default_send_on_check"]}")
+                        f"{context.bot_data['settings']['default_send_on_check']}")
 
         bot_logger.info(f"Default Setting Completed.")
 
         text = (f"☑️ <b>Setting Completed</b>\n\n"
                 f"🔸 <u>Default Interval</u> – "
                 f"<code>{i["months"]}m"
-                f"{i["days"]}d"
-                f"{i["hours"]}h"
-                f"{i["minutes"]}min"
-                f"{i["seconds"]}s</code>\n"
+                f"{i['days']}d"
+                f"{i['hours']}h"
+                f"{i['minutes']}min"
+                f"{i['seconds']}s</code>\n"
                 f"🔸 <u>Default Send On Check</u> – "
-                f"<code>{str(context.bot_data["settings"]["default_send_on_check"])}"
+                f"<code>{str(context.bot_data['settings']['default_send_on_check'])}"
                 f"</code>\n\n"
                 f"🔹Premi il tasto sotto per procedere.")
 
@@ -373,9 +373,9 @@ async def menage_apps(update: Update, context: CallbackContext):
 
                 text = "👁‍🗨 <b>Watched Apps</b>\n\n"
                 for a in context.bot_data["apps"]:
-                    text += (f"  {a}. {context.bot_data['apps'][str(a)]["app_name"]}\n"
-                             f"    <code>Interval</code> {context.bot_data['apps'][str(a)]["check_interval"]}\n"
-                             f"    <code>Send On Check</code> {context.bot_data['apps'][str(a)]["send_on_check"]}\n"
+                    text += (f"  {a}. {context.bot_data['apps'][str(a)]['app_name']}\n"
+                             f"    <code>Interval</code> {context.bot_data['apps'][str(a)]['check_interval']}\n"
+                             f"    <code>Send On Check</code> {context.bot_data['apps'][str(a)]['send_on_check']}\n"
                              )
 
                 text += "\n🆘 Per i dettagli su un'applicazione, scegli 🖋 Modifica\n\n🔸Scegli un'opzione."
@@ -420,27 +420,27 @@ async def list_apps(update: Update, context: CallbackContext):
     else:
         for a in context.bot_data["apps"]:
             ap = context.bot_data["apps"][a]
-            text += (f"  {a}. <i>{ap["app_name"]}</i>\n"
-                     f"     🔸<u>App ID</u>: <code>{ap["app_id"]}</code>\n"
-                     f"     🔸<u>App Link</u>: <a href=\"{ap["app_link"]}\">link 🔗</a>\n"
-                     f"     🔸<u>Current Version</u>: <code>{ap["current_version"]}</code>\n"
-                     f"     🔸<u>Last Update</u>: <code>{ap["last_update"]}</code>\n\n"
+            text += (f"  {a}. <i>{ap['app_name']}</i>\n"
+                     f"     🔸<u>App ID</u>: <code>{ap['app_id']}</code>\n"
+                     f"     🔸<u>App Link</u>: <a href=\"{ap['app_link']}\">link 🔗</a>\n"
+                     f"     🔸<u>Current Version</u>: <code>{ap['current_version']}</code>\n"
+                     f"     🔸<u>Last Update</u>: <code>{ap['last_update']}</code>\n\n"
                      f"     🔸<u>Check Interval</u>: <code>"
-                     f"{ap["check_interval"]["input"]["months"]}m"
-                     f"{ap["check_interval"]["input"]["days"]}d"
-                     f"{ap["check_interval"]["input"]["hours"]}h"
-                     f"{ap["check_interval"]["input"]["minutes"]}min"
-                     f"{ap["check_interval"]["input"]["seconds"]}s</code>\n"
-                     f"     🔸<u>Send On Check</u>: <code>{ap["send_on_check"]}</code>\n\n")
+                     f"{ap['check_interval']['input']['months']}m"
+                     f"{ap['check_interval']['input']['days']}d"
+                     f"{ap['check_interval']['input']['hours']}h"
+                     f"{ap['check_interval']['input']['minutes']}min"
+                     f"{ap['check_interval']['input']['seconds']}s</code>\n"
+                     f"     🔸<u>Send On Check</u>: <code>{ap['send_on_check']}</code>\n\n")
 
             text += (f"     🔸<u>Last Check</u>: <code>None</code>\n"
                      if ap["last_check"] is None
                      else f"     🔸<u>Last Check</u>: <code>"
-                          f"{datetime.strftime(ap["last_check"], '%d %B %Y – %H:%M:%S')}"
+                          f"{datetime.strftime(ap['last_check'], '%d %B %Y – %H:%M:%S')}"
                           f"</code>\n")
 
-            text += (f"     🔸<u>Next Check</u>: <code>{datetime.strftime(ap["next_check"], '%d %B %Y – %H:%M:%S')}"
-                     f"</code>\n\n     ⏸ <b>Suspended</b>: <code>{ap["suspended"]}</code>\n\n")
+            text += (f"     🔸<u>Next Check</u>: <code>{datetime.strftime(ap['next_check'], '%d %B %Y – %H:%M:%S')}"
+                     f"</code>\n\n     ⏸ <b>Suspended</b>: <code>{ap['suspended']}</code>\n\n")
 
         text += f"🔹 Scegli un'opzione."
 
@@ -474,13 +474,13 @@ async def list_last_checks(update: Update, context: CallbackContext):
 
     else:
         for check in context.bot_data["last_checks"]:
-            text += (f"🔸<b> {check["app_name"]}</b>\n"
-                     f"🔹 Time: <code>{datetime.strftime(check["time"], '%d %B %Y – %H:%M:%S')}</code>\n")
+            text += (f"🔸<b> {check['app_name']}</b>\n"
+                     f"🔹 Time: <code>{datetime.strftime(check['time'], '%d %B %Y – %H:%M:%S')}</code>\n")
             if check["update_found"]:
-                text += (f"▫ Update Found ➡ Upgraded from <code>{check["current_version"]}</code> "
-                         f"to <code>{check["new_version"]}</code>")
+                text += (f"▫ Update Found ➡ Upgraded from <code>{check['current_version']}</code> "
+                         f"to <code>{check['new_version']}</code>")
             else:
-                text += f"▪ Update Not Found ➡ <code>Current Version: {check["current_version"]}</code>"
+                text += f"▪ Update Not Found ➡ <code>Current Version: {check['current_version']}</code>"
             text += "\n\n"
 
         text += "ℹ I controlli di eventuali app sospese non sono in lista."
@@ -503,7 +503,7 @@ async def add_app(update: Update, context: CallbackContext):
         if len(context.bot_data["apps"]) != 0:
             text += "🗃 <u>Elenco</u>\n\n"
             for ap in context.bot_data["apps"]:
-                text += f"  {ap}. {context.bot_data['apps'][str(ap)]["app_name"]}\n"
+                text += f"  {ap}. {context.bot_data['apps'][str(ap)]['app_name']}\n"
 
         text += "\n🔸 Manda il link all'applicazione su Google Play."
 
@@ -962,14 +962,14 @@ async def set_app(update: Update, context: CallbackContext):
 
         ap["send_on_check"] = True if update.callback_query.data == "send_on_check_true" else False
 
-        bot_logger.info(f"App {ap["app_name"]} ({ap["app_id"]}) Settled Successfully -> "
+        bot_logger.info(f"App {ap['app_name']} ({ap['app_id']}) Settled Successfully -> "
                         f"Interval: "
-                        f"{ap["check_interval"]["input"]["months"]}months "
-                        f"{ap["check_interval"]["input"]["days"]}days "
-                        f"{ap["check_interval"]["input"]["hours"]}hours "
-                        f"{ap["check_interval"]["input"]["minutes"]}minutes "
-                        f"{ap["check_interval"]["input"]["seconds"]}seconds – Send On Check: "
-                        f"{ap["send_on_check"]}")
+                        f"{ap['check_interval']['input']['months']}months "
+                        f"{ap['check_interval']['input']['days']}days "
+                        f"{ap['check_interval']['input']['hours']}hours "
+                        f"{ap['check_interval']['input']['minutes']}minutes "
+                        f"{ap['check_interval']['input']['seconds']}seconds – Send On Check: "
+                        f"{ap['send_on_check']}")
 
         if "setting_app" in context.chat_data:
             del context.chat_data["setting_app"]
@@ -1009,7 +1009,7 @@ async def edit_app(update: Update, context: CallbackContext):
 
             for ap in context.bot_data["apps"]:
                 a = context.bot_data["apps"][ap]
-                text += (f"  {ap}. <i>{a["app_name"]}</i>\n"
+                text += (f"  {ap}. <i>{a['app_name']}</i>\n"
                          f"      <u>Check Interval</u> "
                          f"<code>{a['check_interval']['input']['months']}m</code>"
                          f"<code>{a['check_interval']['input']['days']}d</code>"
@@ -1113,7 +1113,7 @@ async def edit_app(update: Update, context: CallbackContext):
 
         text = (f"🔵 <b>App Found</b>\n\n"
                 f"▶️ <code>"
-                f"{context.bot_data["apps"][str(context.chat_data["app_index_to_edit"])]["app_name"]}"
+                f"{context.bot_data['apps'][str(context.chat_data['app_index_to_edit'])]['app_name']}"
                 f"</code>\n\n"
                 f"🔸 È l'applicazione che vuoi modificare?")
 
@@ -1168,7 +1168,7 @@ async def remove_app(update: Update, context: CallbackContext):
 
             for ap in context.bot_data["apps"]:
                 a = context.bot_data["apps"][ap]
-                text += f"  {ap}. <i>{a["app_name"]}</i>\n"
+                text += f"  {ap}. <i>{a['app_name']}</i>\n"
 
             text += "\n🔸 Scegli un'applicazione da rimuovere indicando l'<u>indice</u> o il <u>nome</u>."
             message_id = await parse_conversation_message(context=context,
@@ -1198,7 +1198,7 @@ async def remove_app(update: Update, context: CallbackContext):
             suspended = ap["suspended"]
             context.chat_data["app_index_to_delete"] = index
             text = (f"🔵 <b>App Found</b>\n\n"
-                    f"🔸 App Name: <code>{ap["app_name"]}</code>\n\n"
+                    f"🔸 App Name: <code>{ap['app_name']}</code>\n\n"
                     f"🔹 Vuoi rimuovere questa applicazione?")
 
             keyboard = [
@@ -1322,7 +1322,7 @@ async def suspend_app(update: Update, context: CallbackContext):
             context.bot_data["apps"][str(li[1])]["suspended"] = True
 
             text = (f"⏸ <b>Sospendi Controlli App</b>\n\n"
-                    f"🔹  App <code>{context.bot_data["apps"][li[1]]["app_name"]}</code> "
+                    f"🔹  App <code>{context.bot_data['apps'][li[1]]['app_name']}</code> "
                     f"sospesa: non riceverai più aggiornamenti.\n\n"
                     f"🔸 Puoi riattivarla dalle impostazioni.")
 
@@ -1351,7 +1351,7 @@ async def suspend_app(update: Update, context: CallbackContext):
 
             for ap in (a := context.bot_data["apps"]):
                 if a[ap]["suspended"]:
-                    keyboard.append([InlineKeyboardButton(text=f"{a[ap]["app_name"]}",
+                    keyboard.append([InlineKeyboardButton(text=f"{a[ap]['app_name']}",
                                                           callback_data=f"unsuspend_app {ap}")])
 
             keyboard.append([InlineKeyboardButton(text="🔙 Torna Indietro", callback_data="back_to_settings")])
@@ -1369,7 +1369,7 @@ async def suspend_app(update: Update, context: CallbackContext):
             index = update.callback_query.data.split(" ")[1]
             (ap := context.bot_data["apps"][index])["suspended"] = False
             text = ("⏯ <b>Riattiva Controlli App</b>\n\n"
-                    f"ℹ Controlli app <code>{ap["app_name"]}</code> riattivati\n\n"
+                    f"ℹ Controlli app <code>{ap['app_name']}</code> riattivati\n\n"
                     f"🔸 Scegli un'opzione.")
 
             suspended = False
@@ -1407,12 +1407,12 @@ async def see_app_settings(update: Update, context: CallbackContext):
         text = (f"🔍 <b>App Settings</b>\n\n"
                 f"  🔹App Name: <code>{ap["app_name"]}</code>\n"
                 f"  🔹Check Interval: "
-                f"<code>{ap["check_interval"]["input"]["months"]}m</code>"
-                f"<code>{ap["check_interval"]["input"]["days"]}d</code>"
-                f"<code>{ap["check_interval"]["input"]["hours"]}h</code>"
-                f"<code>{ap["check_interval"]["input"]["minutes"]}min</code>"
-                f"<code>{ap["check_interval"]["input"]["seconds"]}s</code>\n"
-                f"  🔹Send On Check: <code>{ap["send_on_check"]}</code>\n\n"
+                f"<code>{ap['check_interval']['input']['months']}m</code>"
+                f"<code>{ap['check_interval']['input']['days']}d</code>"
+                f"<code>{ap['check_interval']['input']['hours']}h</code>"
+                f"<code>{ap['check_interval']['input']['minutes']}min</code>"
+                f"<code>{ap['check_interval']['input']['seconds']}s</code>\n"
+                f"  🔹Send On Check: <code>{ap['send_on_check']}</code>\n\n"
                 f"🔸 Scegli un'opzione.")
 
         message = await context.bot.send_message(chat_id=update.effective_chat.id,
@@ -1496,16 +1496,16 @@ async def schedule_job_and_send_settled_app_message(update: Update, context: Cal
     text = (f"☑️ <b>App Settled Successfully</b>\n\n"
             f"🔹<u>Check Interval</u> ➡ "
             f"<code>"
-            f"{ap["check_interval"]["input"]["months"]}m"
-            f"{ap["check_interval"]["input"]["days"]}d"
-            f"{ap["check_interval"]["input"]["hours"]}h"
-            f"{ap["check_interval"]["input"]["minutes"]}"
+            f"{ap['check_interval']['input']['months']}m"
+            f"{ap['check_interval']['input']['days']}d"
+            f"{ap['check_interval']['input']['hours']}h"
+            f"{ap['check_interval']['input']['minutes']}"
             f"min"
-            f"{ap["check_interval"]["input"]["seconds"]}s"
+            f"{ap['check_interval']['input']['seconds']}s"
             f"</code>\n"
             f"🔹<u>Send On Check</u> ➡ "
-            f"<code>{ap["send_on_check"]}</code>\n\n"
-            f"🔸 <u>Next Check</u> ➡ <code>{ap["next_check"].strftime('%d %B %Y – %H:%M:%S')}</code>"
+            f"<code>{ap['send_on_check']}</code>\n\n"
+            f"🔸 <u>Next Check</u> ➡ <code>{ap['next_check'].strftime('%d %B %Y – %H:%M:%S')}</code>"
             f"\n\n")
 
     await context.bot.send_chat_action(chat_id=update.effective_chat.id,
@@ -1566,9 +1566,9 @@ async def schedule_job_and_send_settled_app_message(update: Update, context: Cal
         }
     )
 
-    bot_logger.info(f"Repeating Job for app {ap["app_name"]} Scheduled Successfully "
+    bot_logger.info(f"Repeating Job for app {ap['app_name']} Scheduled Successfully "
                     f"– Next Check at {(datetime.now(pytz.timezone('Europe/Rome'))
-                                        + ap["check_interval"]["timedelta"]).strftime("%d %b %Y - %H:%M:%S")}")
+                                        + ap['check_interval']['timedelta']).strftime('%d %b %Y - %H:%M:%S')}")
 
     if "editing" in context.bot_data:
         del context.bot_data["editing"]

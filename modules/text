@@ -1,0 +1,76 @@
+set_app_conv_handler = ConversationHandler(
+    entry_points=[
+        ...
+    ],
+    states={
+        # NO CHILD CONV_HANDLERS
+    },
+    fallbacks=[
+        ...
+    ],
+    map_to_parent={
+        ConversationHandler.END: ConversationHandler.END
+    }
+)
+
+add_app_conv_handler = ConversationHandler(
+    entry_points=[
+        ...
+    ],
+    states={
+        0: [set_app_conv_handler]
+    },
+    fallbacks=[
+        ...
+    ],
+    map_to_parent={
+        ConversationHandler.END: MAIN_MENU
+    }
+)
+
+edit_app_conv_handler = ConversationHandler(
+    entry_points=[
+            ...
+    ],
+    states={
+        0: [set_app_conv_handler],
+    },
+    fallbacks=[
+        ...
+    ],
+    map_to_parent={
+        ConversationHandler.END: MAIN_MENU
+    }
+)
+
+remove_app_conv_handler = ConversationHandler(
+    entry_points=[
+            ...
+    ],
+    states={
+        0: [add_app_conv_handler],
+    },
+    fallbacks=[
+        ...
+    ],
+    map_to_parent={
+        ConversationHandler.END: MAIN_MENU
+    }
+)
+
+
+main_menu_conv_handler = ConversationHandler(
+    entry_points=[
+            ...
+    ],
+    states={
+        MAIN_MENU:[
+            add_app_conv_handler,
+            edit_app_conv_handler,
+            remove_app_conv_handler
+        ]
+    },
+    fallbacks=[
+        ...
+    ]
+)

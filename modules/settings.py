@@ -1273,6 +1273,9 @@ async def remove_app(update: Update, context: CallbackContext):
         app_name = context.bot_data["apps"][context.chat_data["app_index_to_delete"]]["app_name"]
         app_id = context.bot_data["apps"][context.chat_data["app_index_to_delete"]]["app_id"]
 
+        for j in context.job_queue.get_jobs_by_name(app_name):
+            j.schedule_removal()
+
         for ap in context.bot_data["apps"]:
             if int(ap) < int(context.chat_data["app_index_to_delete"]):
                 continue

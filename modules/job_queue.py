@@ -1,4 +1,5 @@
 import datetime
+from dotenv import load_dotenv
 import os
 import pytz
 
@@ -23,6 +24,7 @@ console_handler = logging.StreamHandler()
 console_handler.setFormatter(formatter)
 job_queue_logger.addHandler(console_handler)
 
+load_dotenv()
 WHO = os.getenv("ADMIN_ID")
 
 

@@ -15,44 +15,70 @@ caricate correttamente o completamente.
 Tale passaggio è eseguito dalla funzione <shortcut>set_data</shortcut>.
 
 Essa verifica il contenuto di `bot_data`: tipicamente, se almeno una delle chiavi
-(`initialized`, `apps`, `settings`, `last_checks`) non è presente, vuol dire che la
+(`apps`, `settings`, `last_checks`) non è presente, vuol dire che la
 persistenza non è stata caricata; tuttavia, il controllo viene fatto su ogni singola
 chiave per mera questione di completezza.
 
-<procedure>
-        <p>Se alcune chiavi sono presenti e altre no, significa che la persistenza non
-è stata caricata correttamente. In tal caso, potrebbe essere opportuno loggare l'evento
-siccome è alcune informazioni, così facendo, vanno perse perché sostituite con valori di
-default.</p>
-</procedure>
+### 🔧 Valori di Default
+Quando verrà aggiunta o modificata un'applicazione, all'utente viene data la possibilità di
+settare valori manualmente oppure di usare quelli di default. In questa fare, il bot guida 
+l'utente nel settaggio di tali valori:
+- *Intervallo di Default* – l'intervallo di controllo tra due check;
+- *Condizione di Invio del Messaggio* – se il messaggio viene mandato a ogni check o solo 
+quando viene trovato un aggiornamento.
 
-In particolare, se `initialized` non è presente in `bot_data`, viene aggiunta e settata
-a `False` (di default, infatti, le applicazioni non sono settate ed è l'utente a doverlo fare).
+## ⏭ Fase Successiva
+Dopo il settaggio delle impostazioni di default, il bot è pronto per essere utilizzato; di 
+seguito le varie opzioni.
 
-Se `apps` non è presente in `bot_data`, viene aggiunta come dizionario vuoto e viene
-tentata l'apertura del file <shortcut>config.json</shortcut> contenente eventuali link 
-iniziali. Se tale file non è presente, non ci sono applicazioni da settare e il parametro
-`initialized` viene impostato a `True`.
+- 1️⃣ _Primo Menu_ – Il primo menù permette di modificare le impostazioni o stampare gli ultimi controlli 
+effettuati.
 
-Viceversa, se il file <shortcut>config.json</shortcut> è presente, viene letto e viene
-verificata la presenza di link all'interno della lista corrispondente. 
+  -  2️⃣.1️⃣ _Modifica delle Impostazioni_ – Questo menù consente di gestire le applicazioni (vedi sotto) 
+  e modificare le impostazioni di default.
+        - 3️⃣.1️⃣ _Gestione delle Applicazioni_ - Questo menù consente di aggiungere, modificare o rimuovere
+        applicazioni.
 
-Se vengono trovati link, l'evento viene loggato e, per ognuno di essi, viene creata una
-voce nel dizionario `bot_data[apps]` contenente il link in questione (`app_link`), il 
-nome dell'app (`app_name` – tramite <shortcut>get_app_name_with_link()</shortcut>, 
-che assume il nome del link indicato) e `check_interval`, ovvero il tempo tra due controlli,
-che viene impostato a `None` di default.
+        - 3️⃣.2️⃣ _Modifica delle Impostazioni di Default_ – Quest'opzione guida l'utente nella reimpostazione 
+        dei valori di default del bot.
 
-Se non vengono trovati link, la variabile `initialized` viene impostata a `True`, siccome non ci
-sono applicazione da settare.
+  -  2️⃣.2️⃣ _Stampare gli Ultimi Controlli_ – Questa opzione consente di visualizzare gli ultimi 10 controlli effettuati. Gli elementi 
+  della lista contengono informazioni su quando il check di una certa app è stato fatto, il nome
+  dell'applicazione e se è stato trovato un aggiornamento oppure no.
 
-Se la voce `settings` non è presente in `bot_data`, viene creato un dizionario con i valori 
-di impostazione default.
+### 🗂 _Gestione delle Applicazioni_
+Le applicazioni possono essere aggiunte, modificate o rimosse.
 
-Analogamente, se la voce `last_checks` non è in `bot_data`, viene creato un dizionario vuoto
-destinato allo scopo di tenere traccia l'ultimo controllo per ogni applicazione.
+Quando nessuna applicazione è in lista, ogni opzione rimanda all'aggiunta. 
 
-### ⏯ Avvio del Bot
-Quando Linxay invia <shortcut>/start</shortcut>, viene verificata la presenza di applicazioni
-da settare: se vengono trovate (`bot_data[...]["settled"] == False`), viene richiesto 
-se impostarle ora, dopo oppure mostrare l'elenco di tali applicazioni.
+L'**aggiunta** prevede l'indicazione del _link al Play Store_ dell'applicazione di interesse. I controlli richiedono che
+il messaggio inviato sia un link e che il link richiedono che il dominio sia corretto. Il bot 
+chiede se l'applicazione rilevata è corretta e, in caso affermativo, viene avviata la procedura 
+di settaggio.
+
+La fase di settaggio richiede l'_impostazione dell'intervallo tra due check_ e la _condizione di invio_
+del messaggio. Alternativamente, è possibile settare direttamente _i valori di default_ tramite 
+apposito tasto, per impostarla più velocemente.
+
+⚠ Se si tenta di aggiungere un'applicazione già presente, il bot avvisa e rimanda alla modifica della stessa.
+
+
+La **modifica** delle applicazioni prevede la _ripetizione della procedura_ eseguita per aggiungerle; per 
+selezionare l'applicazione tramite indicazione del nome o del numero corrispondente.
+
+Analogamente, la **rimozione** richiede la scelta dell'applicazione. Prima di rimuovere l'applicazione,
+all'utente è offerta la possibilità di sospenderla.
+
+La **sospensione** è un meccanismo tramite cui si possono interrompere rapidamente gli aggiornamenti di una
+certa applicazione. 
+
+I metodi per sospendere un'applicazione sono 2: il primo è seguendo il menù di rimozione,
+l'altro è tramite un messaggio di controllo della stessa applicazione: tra le opzioni offerte sotto a esso,
+compare un tasto per applicare la sospensione. 
+
+Quando si sospende un'applicazione, all'interno del menù di gestione delle applicazioni compare un altro tasto 
+che consente di rimuovere la sospensione; qualora premuto, il bot consente di rimuovere la sospensione di una certa 
+app premendo il tasto contenente il nome dell'applicazione sospesa.
+
+Inoltre, è possibile modificare le impostazioni di un'app direttamente da un messaggio di controllo
+tramite apposito tasto.

@@ -94,13 +94,6 @@ async def set_data(app: Application):
     if "last_checks" not in app.bot_data:
         app.bot_data["last_checks"] = []
 
-    if "actions" not in app.bot_data:
-        app.bot_data["actions"] = {
-            "adding": False,
-            "editing": False,
-            "editing_from_check": False
-        }
-
     for ap in app.bot_data["apps"]:
         li = []
         i = app.bot_data["apps"][ap]

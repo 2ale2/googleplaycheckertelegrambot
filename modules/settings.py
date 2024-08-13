@@ -236,7 +236,7 @@ async def set_defaults(update: Update, context: CallbackContext):
 
         text = (f"☑️ <b>Setting Completed</b>\n\n"
                 f"🔸 <u>Default Interval</u> – "
-                f"<code>{i["months"]}m"
+                f"<code>{i['months']}m"
                 f"{i['days']}d"
                 f"{i['hours']}h"
                 f"{i['minutes']}min"
@@ -1405,7 +1405,7 @@ async def see_app_settings(update: Update, context: CallbackContext):
         ap = context.bot_data["apps"][index]
 
         text = (f"🔍 <b>App Settings</b>\n\n"
-                f"  🔹App Name: <code>{ap["app_name"]}</code>\n"
+                f"  🔹App Name: <code>{ap['app_name']}</code>\n"
                 f"  🔹Check Interval: "
                 f"<code>{ap['check_interval']['input']['months']}m</code>"
                 f"<code>{ap['check_interval']['input']['days']}d</code>"

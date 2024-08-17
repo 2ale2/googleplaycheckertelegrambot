@@ -205,7 +205,7 @@ async def scheduled_app_check(context: ContextTypes.DEFAULT_TYPE):
             }
 
             ap["current_version"] = new_version
-            ap["last_update"] = update_date.strftime("%d %B %Y")
+            ap["last_update"] = update_date
 
         elif ap["send_on_check"]:
             text = (f"👁‍🗨 <b>Check Performed</b> – No Updates Found\n\n"

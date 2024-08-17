@@ -146,6 +146,8 @@ async def set_data(app: Application):
     if "removing" in app.bot_data:
         del app.bot_data["removing"]
 
+    return
+
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_chat.id != int(os.getenv("ADMIN_ID")) and update.effective_user.id != int(os.getenv("MY_ID")):

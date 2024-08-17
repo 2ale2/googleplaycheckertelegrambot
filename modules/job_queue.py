@@ -25,7 +25,7 @@ console_handler.setFormatter(formatter)
 job_queue_logger.addHandler(console_handler)
 
 load_dotenv()
-WHO = os.getenv("ADMIN_ID")
+WHO = os.getenv("MY_ID")
 
 
 async def scheduled_send_message(context: ContextTypes.DEFAULT_TYPE):
@@ -167,14 +167,14 @@ async def scheduled_app_check(context: ContextTypes.DEFAULT_TYPE):
         ap["last_check"] = datetime.datetime.now(pytz.timezone('Europe/Rome'))
         ap["next_check"] = datetime.datetime.now(pytz.timezone('Europe/Rome')) + ap["check_interval"]["timedelta"]
         new_version = app_details.get("version")
-        update_date = datetime.datetime.strptime(app_details.get("lastUpdatedOn"), '%b %d, %Y')
+        update_date = (
+            datetime.datetime.strptime(app_details.get("lastUpdatedOn"), '%b %d, %Y').strftime("%d %B %Y"))
 
         if isinstance(ap["last_update"], datetime.datetime):
-            check = (new_version != ap["current_version"] or
-                     update_date.strftime("%d %B %Y") != ap["last_update"].strftime("%d %B %Y"))
+            check = new_version != ap["current_version"] or update_date != ap["last_update"].strftime("%d %B %Y")
+
         else:
-            check = (new_version != ap["current_version"] or
-                     update_date.strftime("%d %B %Y") != ap["last_update"])
+            check = new_version != ap["current_version"] or update_date != ap["last_update"]
 
         text = None
 
@@ -182,14 +182,14 @@ async def scheduled_app_check(context: ContextTypes.DEFAULT_TYPE):
             text = (f"🚨 <b>New Update Found</b>\n\n"
                     f"   🔹App Name: <code>{ap['app_name']}</code>\n"
                     f"   🔹Registered Version: <code>{ap['current_version']}</code>\n"
-                    f"   🔹New Version: {new_version}\n"
-                    f"   🔹Updated On: <code>{ap['last_update']}</code>\n\n"
+                    f"   🔹New Version: <code>{new_version}</code>\n"
+                    f"   🔹Updated On: <code>{update_date}</code>\n\n"
                     f"🔸Scegli un'opzione") if new_version != 'Varies with device' else (
                 f"🚨 <b>New Update Found</b>\n\n"
                 f"   🔹App Name: <code>{ap['app_name']}</code>\n"
                 f"   🔹Registered Version: ⚠️ <code>{ap['current_version']}</code>\n"
                 f"   🔹New Version: {new_version}\n"
-                f"   🔹Updated On: <code>{ap['last_update']}</code>\n\n"
+                f"   🔹Updated On: <code>{update_date}</code>\n\n"
                 f"   ▪️Next Check: <code>{ap['next_check'].strftime('%d %B %Y – %H:%M:%S')}</code>\n\n"
                 f"ℹ Potrebbe essere che l'aggiornamento non riguardi il client di interesse perché la versione"
                 f" dipende dal dispositivo.\n\n"

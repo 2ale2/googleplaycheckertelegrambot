@@ -25,7 +25,7 @@ console_handler.setFormatter(formatter)
 job_queue_logger.addHandler(console_handler)
 
 load_dotenv()
-WHO = os.getenv("MY_ID")
+WHO = os.getenv("ADMIN_ID")
 
 
 async def scheduled_send_message(context: ContextTypes.DEFAULT_TYPE):
